@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../Services/preferences_service.dart';
 
 import '../theme/app_colors.dart';
-import 'home_screen.dart';
+import 'main_navigation_screen.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -151,7 +151,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     final Widget destination =
         rememberMe && FirebaseAuth.instance.currentUser != null
-            ? const HomeScreen()
+            ? const MainNavigationScreen()
             : const LoginScreen();
 
     await Navigator.of(context).pushReplacement(
