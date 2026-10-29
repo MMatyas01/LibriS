@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../Services/auth_service.dart';
+import '../services/auth_service.dart';
 import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -12,13 +12,12 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-
-  final _authService = AuthService();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  final AuthService _authService = AuthService();
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
@@ -37,13 +36,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       await _authService.register(
-        email: _emailController.text,
+        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
@@ -52,7 +53,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (_) => const HomeScreen(),
         ),
         (route) => false,
@@ -62,57 +63,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      String message;
+      final String message;
 
       switch (error.code) {
         case 'email-already-in-use':
-          message =
-              'Ehhez az e-mail-címhez már tartozik felhasználói fiók.';
+          message = 'An account already exists for this email address.';
           break;
-
         case 'invalid-email':
-          message = 'Az e-mail-cím formátuma nem megfelelő.';
+          message = 'The email address is invalid.';
           break;
-
         case 'weak-password':
-          message = 'A megadott jelszó túl gyenge.';
+          message = 'The password is too weak.';
           break;
-
         case 'operation-not-allowed':
-          message =
-              'Az e-mailes regisztráció nincs engedélyezve.';
+          message = 'Email and password registration is not enabled.';
           break;
-
         case 'network-request-failed':
-          message =
-              'Nem sikerült kapcsolódni a hálózathoz.';
+          message = 'Unable to connect to the network.';
           break;
-
         case 'too-many-requests':
-          message =
-              'Túl sok próbálkozás történt. Próbáld újra később.';
+          message = 'Too many attempts. Please try again later.';
           break;
-
         default:
-          message =
-              'Nem sikerült létrehozni a felhasználói fiókot.';
+          message = 'Unable to create your account.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(message)),
+        );
     } catch (_) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Váratlan hiba történt.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('An unexpected error occurred.'),
+          ),
+        );
     } finally {
       if (mounted) {
         setState(() {
@@ -126,30 +118,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Regisztráció'),
+        title: const Text('Create account'),
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 420,
-              ),
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Icon(
                       Icons.person_add_alt_1_rounded,
                       size: 80,
-                      color: Color(0xFF5C3D99),
                     ),
                     const SizedBox(height: 24),
                     const Text(
-                      'Fiók létrehozása',
+                      'Create your account',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 28,
@@ -158,7 +146,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Regisztrálj a LibriS használatához.',
+                      'Create an account to start using LibriS.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
@@ -166,65 +154,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-
-                    // E-mail-cím
                     TextFormField(
                       controller: _emailController,
                       enabled: !_isLoading,
-                      keyboardType:
-                          TextInputType.emailAddress,
+                      keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      autofillHints: const [
-                        AutofillHints.email,
-                      ],
+                      autofillHints: const [AutofillHints.email],
+                      autocorrect: false,
                       decoration: const InputDecoration(
-                        labelText: 'E-mail-cím',
-                        hintText: 'pelda@email.com',
-                        prefixIcon:
-                            Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
+                        labelText: 'Email address',
+                        hintText: 'example@email.com',
+                        prefixIcon: Icon(Icons.email_outlined),
                       ),
-                      validator: (value) {
-                        final email = value?.trim() ?? '';
+                      validator: (String? value) {
+                        final String email = value?.trim() ?? '';
 
                         if (email.isEmpty) {
-                          return 'Add meg az e-mail-címedet.';
+                          return 'Enter your email address.';
                         }
 
-                        final emailPattern = RegExp(
+                        final RegExp emailPattern = RegExp(
                           r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                         );
 
                         if (!emailPattern.hasMatch(email)) {
-                          return 'Adj meg egy érvényes e-mail-címet.';
+                          return 'Enter a valid email address.';
                         }
 
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-
-                    // Jelszó
                     TextFormField(
                       controller: _passwordController,
                       enabled: !_isLoading,
                       obscureText: !_isPasswordVisible,
                       textInputAction: TextInputAction.next,
-                      autofillHints: const [
-                        AutofillHints.newPassword,
-                      ],
+                      autofillHints: const [AutofillHints.newPassword],
                       decoration: InputDecoration(
-                        labelText: 'Jelszó',
-                        prefixIcon:
-                            const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible =
-                                  !_isPasswordVisible;
-                            });
-                          },
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _isPasswordVisible = !_isPasswordVisible;
+                                  });
+                                },
+                          tooltip: _isPasswordVisible
+                              ? 'Hide password'
+                              : 'Show password',
                           icon: Icon(
                             _isPasswordVisible
                                 ? Icons.visibility_off_outlined
@@ -232,60 +212,55 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                       ),
-                      validator: (value) {
-                        final password = value ?? '';
+                      validator: (String? value) {
+                        final String password = value ?? '';
 
                         if (password.isEmpty) {
-                          return 'Add meg a jelszavadat.';
+                          return 'Enter your password.';
                         }
 
                         if (password.length < 8) {
-                          return 'A jelszó legalább 8 karakter legyen.';
+                          return 'The password must be at least 8 characters long.';
                         }
 
-                        if (!RegExp(r'[A-Z]')
-                            .hasMatch(password)) {
-                          return 'Legyen benne legalább egy nagybetű.';
+                        if (!RegExp(r'[A-Z]').hasMatch(password)) {
+                          return 'Include at least one uppercase letter.';
                         }
 
-                        if (!RegExp(r'[0-9]')
-                            .hasMatch(password)) {
-                          return 'Legyen benne legalább egy szám.';
+                        if (!RegExp(r'[0-9]').hasMatch(password)) {
+                          return 'Include at least one number.';
                         }
 
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-
-                    // Jelszó megerősítése
                     TextFormField(
-                      controller:
-                          _confirmPasswordController,
+                      controller: _confirmPasswordController,
                       enabled: !_isLoading,
-                      obscureText:
-                          !_isConfirmPasswordVisible,
+                      obscureText: !_isConfirmPasswordVisible,
                       textInputAction: TextInputAction.done,
-                      autofillHints: const [
-                        AutofillHints.newPassword,
-                      ],
+                      autofillHints: const [AutofillHints.newPassword],
                       onFieldSubmitted: (_) {
                         if (!_isLoading) {
                           _register();
                         }
                       },
                       decoration: InputDecoration(
-                        labelText: 'Jelszó megerősítése',
-                        prefixIcon:
-                            const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
+                        labelText: 'Confirm password',
+                        prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isConfirmPasswordVisible =
-                                  !_isConfirmPasswordVisible;
-                            });
-                          },
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _isConfirmPasswordVisible =
+                                        !_isConfirmPasswordVisible;
+                                  });
+                                },
+                          tooltip: _isConfirmPasswordVisible
+                              ? 'Hide password'
+                              : 'Show password',
                           icon: Icon(
                             _isConfirmPasswordVisible
                                 ? Icons.visibility_off_outlined
@@ -293,51 +268,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                       ),
-                      validator: (value) {
+                      validator: (String? value) {
                         if (value == null || value.isEmpty) {
-                          return 'Erősítsd meg a jelszavadat.';
+                          return 'Confirm your password.';
                         }
 
-                        if (value !=
-                            _passwordController.text) {
-                          return 'A két jelszó nem egyezik.';
+                        if (value != _passwordController.text) {
+                          return 'The passwords do not match.';
                         }
 
                         return null;
                       },
                     ),
                     const SizedBox(height: 24),
-
                     FilledButton(
-                      onPressed:
-                          _isLoading ? null : _register,
+                      onPressed: _isLoading ? null : _register,
                       style: FilledButton.styleFrom(
-                        minimumSize:
-                            const Size.fromHeight(52),
+                        minimumSize: const Size.fromHeight(52),
                       ),
                       child: _isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child:
-                                  CircularProgressIndicator(
+                          ? const SizedBox.square(
+                              dimension: 22,
+                              child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Regisztráció'),
+                          : const Text('Create account'),
                     ),
                     const SizedBox(height: 12),
-
                     TextButton(
                       onPressed: _isLoading
                           ? null
                           : () {
                               Navigator.of(context).pop();
                             },
-                      child: const Text(
-                        'Már van fiókod? Bejelentkezés',
-                      ),
+                      child: const Text('Already have an account? Log in'),
                     ),
                   ],
                 ),
