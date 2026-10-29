@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../Services/auth_service.dart';
-import 'main_navigation_screen.dart';
+import '../services/auth_service.dart';
+import '../services/preferences_service.dart';
+import '../theme/app_colors.dart';
 import 'forgot_password_screen.dart';
+import 'main_navigation_screen.dart';
 import 'register_screen.dart';
-import '../Services/preferences_service.dart';
-import '../Theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,11 +16,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _authService = AuthService();
-  final _preferencesService = PreferencesService();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
+  final PreferencesService _preferencesService = PreferencesService();
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
@@ -34,9 +34,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) {
+    final FormState? formState = _formKey.currentState;
+
+    if (formState == null || !formState.validate()) {
       return;
     }
+
+    FocusScope.of(context).unfocus();
 
     setState(() {
       _isLoading = true;
@@ -44,19 +48,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await _authService.signIn(
-        email: _emailController.text,
+        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      await _preferencesService.setRememberMe(
-        _rememberMe,
-      );
+
+      await _preferencesService.setRememberMe(_rememberMe);
 
       if (!mounted) {
         return;
       }
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (_) => const MainNavigationScreen(),
         ),
       );
@@ -65,44 +68,47 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      String message;
+      final String message;
 
       switch (error.code) {
         case 'invalid-email':
-          message = 'Az e-mail-cím formátuma nem megfelelő.';
+          message = 'The email address is invalid.';
           break;
-
         case 'invalid-credential':
-          message = 'Hibás e-mail-cím vagy jelszó.';
+        case 'wrong-password':
+        case 'user-not-found':
+          message = 'Incorrect email address or password.';
           break;
-
         case 'user-disabled':
-          message = 'Ez a felhasználói fiók le van tiltva.';
+          message = 'This user account has been disabled.';
           break;
-
         case 'too-many-requests':
-          message = 'Túl sok sikertelen próbálkozás. Próbáld újra később.';
+          message = 'Too many failed attempts. Please try again later.';
           break;
-
+        case 'network-request-failed':
+          message = 'Unable to connect to the network.';
+          break;
         default:
-          message = 'Nem sikerült bejelentkezni. Próbáld újra.';
+          message = 'Unable to log in. Please try again.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(message)),
+        );
     } catch (_) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Váratlan hiba történt.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('An unexpected error occurred.'),
+          ),
+        );
     } finally {
       if (mounted) {
         setState(() {
@@ -112,214 +118,269 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _openForgotPasswordScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const ForgotPasswordScreen(),
+      ),
+    );
+  }
+
+  void _openRegisterScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const RegisterScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.ivory,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 420,
+        child: LayoutBuilder(
+          builder: (
+            BuildContext context,
+            BoxConstraints viewportConstraints,
+          ) {
+            final double viewportWidth = viewportConstraints.maxWidth;
+            final double horizontalPadding =
+                (viewportWidth * 0.06).clamp(16.0, 40.0);
+
+            return SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: 16,
               ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Icon(
-                      Icons.menu_book_rounded,
-                      size: 80,
-                      color: Color(0xFF5C3D99),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Üdvözlünk a LibriS-ben!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Jelentkezz be a folytatáshoz.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'E-mail-cím',
-                        prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        final email = value?.trim() ?? '';
-
-                        if (email.isEmpty) {
-                          return 'Add meg az e-mail-címedet.';
-                        }
-
-                        if (!email.contains('@')) {
-                          return 'Adj meg egy érvényes e-mail-címet.';
-                        }
-
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: !_isPasswordVisible,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) {
-                        if (!_isLoading) {
-                          _login();
-                        }
-                      },
-                      decoration: InputDecoration(
-                        labelText: 'Jelszó',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Add meg a jelszavadat.';
-                        }
-
-                        if (value.length < 6) {
-                          return 'A jelszó legalább 6 karakter legyen.';
-                        }
-
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const ForgotPasswordScreen(),
-                                        ),
-                                      );
-                                    },
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                minimumSize: const Size(0, 44),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                alignment: Alignment.centerLeft,
-                              ),
-                              child: const Text(
-                                'Elfelejtetted a jelszavad?',
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Emlékezz rám',
-                              style: TextStyle(
-                                color: AppColors.charcoal,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Transform.scale(
-                              scale: 0.82,
-                              alignment: Alignment.centerRight,
-                              child: Switch.adaptive(
-                                value: _rememberMe,
-                                activeTrackColor: AppColors.forest,
-                                inactiveTrackColor: AppColors.sage,
-                                onChanged: _isLoading
-                                    ? null
-                                    : (value) {
-                                        setState(() {
-                                          _rememberMe = value;
-                                        });
-                                      },
-                              ),
-                            ),
-                          ],
-                        ),
+                        _buildResponsiveLogo(),
+                        const SizedBox(height: 12),
+                        _buildEmailField(),
+                        const SizedBox(height: 16),
+                        _buildPasswordField(),
+                        const SizedBox(height: 8),
+                        _buildLoginOptionsRow(),
+                        const SizedBox(height: 20),
+                        _buildLoginButton(),
+                        const SizedBox(height: 12),
+                        _buildRegisterRow(),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _isLoading ? null : _login,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Bejelentkezés'),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('Nincs még fiókod?'),
-                        TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const RegisterScreen(),
-                                    ),
-                                  );
-                                },
-                          child: const Text('Regisztráció'),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResponsiveLogo() {
+    return Align(
+      alignment: Alignment.center,
+      child: FractionallySizedBox(
+        widthFactor: 0.92,
+        child: Image.asset(
+          'assets/images/libris_logo.png',
+          fit: BoxFit.contain,
+          semanticLabel: 'LibriS logo',
+          errorBuilder: (
+            BuildContext context,
+            Object error,
+            StackTrace? stackTrace,
+          ) {
+            return const AspectRatio(
+              aspectRatio: 1,
+              child: Center(
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: AppColors.secondary,
+                  size: 48,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmailField() {
+    return TextFormField(
+      controller: _emailController,
+      enabled: !_isLoading,
+      keyboardType: TextInputType.emailAddress,
+      textInputAction: TextInputAction.next,
+      autofillHints: const [AutofillHints.email],
+      autocorrect: false,
+      decoration: const InputDecoration(
+        labelText: 'Email address',
+        hintText: 'example@email.com',
+        prefixIcon: Icon(Icons.email_outlined),
+      ),
+      validator: (String? value) {
+        final String email = value?.trim() ?? '';
+
+        if (email.isEmpty) {
+          return 'Enter your email address.';
+        }
+
+        final RegExp emailPattern = RegExp(
+          r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+        );
+
+        if (!emailPattern.hasMatch(email)) {
+          return 'Enter a valid email address.';
+        }
+
+        return null;
+      },
+    );
+  }
+
+  Widget _buildPasswordField() {
+    return TextFormField(
+      controller: _passwordController,
+      enabled: !_isLoading,
+      obscureText: !_isPasswordVisible,
+      textInputAction: TextInputAction.done,
+      autofillHints: const [AutofillHints.password],
+      onFieldSubmitted: (_) {
+        if (!_isLoading) {
+          _login();
+        }
+      },
+      decoration: InputDecoration(
+        labelText: 'Password',
+        prefixIcon: const Icon(Icons.lock_outline),
+        suffixIcon: IconButton(
+          onPressed: _isLoading
+              ? null
+              : () {
+                  setState(() {
+                    _isPasswordVisible = !_isPasswordVisible;
+                  });
+                },
+          tooltip: _isPasswordVisible ? 'Hide password' : 'Show password',
+          icon: Icon(
+            _isPasswordVisible
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
           ),
         ),
       ),
+      validator: (String? value) {
+        final String password = value ?? '';
+
+        if (password.isEmpty) {
+          return 'Enter your password.';
+        }
+
+        if (password.length < 6) {
+          return 'The password must be at least 6 characters long.';
+        }
+
+        return null;
+      },
+    );
+  }
+
+  Widget _buildLoginOptionsRow() {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        width: 400,
+        child: Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: _isLoading ? null : _openForgotPasswordScreen,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 44),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    alignment: Alignment.centerLeft,
+                  ),
+                  child: const Text('Forgot your password?'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Semantics(
+              label: 'Remember me',
+              toggled: _rememberMe,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Remember me',
+                    style: TextStyle(
+                      color: AppColors.charcoal,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Switch.adaptive(
+                    value: _rememberMe,
+                    activeTrackColor: AppColors.forest,
+                    inactiveTrackColor: AppColors.sage,
+                    onChanged: _isLoading
+                        ? null
+                        : (bool value) {
+                            setState(() {
+                              _rememberMe = value;
+                            });
+                          },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginButton() {
+    return FilledButton(
+      onPressed: _isLoading ? null : _login,
+      child: _isLoading
+          ? const SizedBox.square(
+              dimension: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Text('Log in'),
+    );
+  }
+
+  Widget _buildRegisterRow() {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 2,
+      children: [
+        const Text("Don't have an account?"),
+        TextButton(
+          onPressed: _isLoading ? null : _openRegisterScreen,
+          child: const Text('Create account'),
+        ),
+      ],
     );
   }
 }
