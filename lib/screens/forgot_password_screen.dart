@@ -1,21 +1,19 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../Services/auth_service.dart';
+import '../services/auth_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
-  State<ForgotPasswordScreen> createState() =>
-      _ForgotPasswordScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState
-    extends State<ForgotPasswordScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _authService = AuthService();
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final AuthService _authService = AuthService();
 
   bool _isLoading = false;
   bool _emailSent = false;
@@ -31,13 +29,15 @@ class _ForgotPasswordScreenState
       return;
     }
 
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       await _authService.sendPasswordResetEmail(
-        email: _emailController.text,
+        email: _emailController.text.trim(),
       );
 
       if (!mounted) {
@@ -48,56 +48,54 @@ class _ForgotPasswordScreenState
         _emailSent = true;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Ha az e-mail-címhez tartozik fiók, elküldtük a '
-            'jelszó-visszaállító linket.',
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'If an account exists for this email address, '
+              'a password reset link has been sent.',
+            ),
           ),
-        ),
-      );
+        );
     } on FirebaseAuthException catch (error) {
       if (!mounted) {
         return;
       }
 
-      String message;
+      final String message;
 
       switch (error.code) {
         case 'invalid-email':
-          message = 'Az e-mail-cím formátuma nem megfelelő.';
+          message = 'The email address is invalid.';
           break;
-
         case 'too-many-requests':
-          message =
-              'Túl sok kérés érkezett. Próbáld újra később.';
+          message = 'Too many requests. Please try again later.';
           break;
-
         case 'network-request-failed':
-          message =
-              'Nem sikerült kapcsolódni a hálózathoz.';
+          message = 'Unable to connect to the network.';
           break;
-
         default:
-          message =
-              'Nem sikerült elküldeni a visszaállító e-mailt.';
+          message = 'Unable to send the password reset email.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(message)),
+        );
     } catch (_) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Váratlan hiba történt.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('An unexpected error occurred.'),
+          ),
+        );
     } finally {
       if (mounted) {
         setState(() {
@@ -111,30 +109,26 @@ class _ForgotPasswordScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Elfelejtett jelszó'),
+        title: const Text('Forgot password'),
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 420,
-              ),
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Icon(
                       Icons.lock_reset_rounded,
                       size: 80,
-                      color: Color(0xFF5C3D99),
                     ),
                     const SizedBox(height: 24),
                     const Text(
-                      'Jelszó visszaállítása',
+                      'Reset your password',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 28,
@@ -143,9 +137,8 @@ class _ForgotPasswordScreenState
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Add meg a regisztrációhoz használt '
-                      'e-mail-címedet. Küldünk egy linket, '
-                      'amellyel új jelszót állíthatsz be.',
+                      'Enter the email address associated with your account. '
+                      'We will send you a link to create a new password.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
@@ -156,37 +149,33 @@ class _ForgotPasswordScreenState
                     TextFormField(
                       controller: _emailController,
                       enabled: !_isLoading,
-                      keyboardType:
-                          TextInputType.emailAddress,
+                      keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.done,
-                      autofillHints: const [
-                        AutofillHints.email,
-                      ],
+                      autofillHints: const [AutofillHints.email],
+                      autocorrect: false,
                       onFieldSubmitted: (_) {
                         if (!_isLoading) {
                           _sendResetEmail();
                         }
                       },
                       decoration: const InputDecoration(
-                        labelText: 'E-mail-cím',
-                        hintText: 'pelda@email.com',
-                        prefixIcon:
-                            Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
+                        labelText: 'Email address',
+                        hintText: 'example@email.com',
+                        prefixIcon: Icon(Icons.email_outlined),
                       ),
-                      validator: (value) {
-                        final email = value?.trim() ?? '';
+                      validator: (String? value) {
+                        final String email = value?.trim() ?? '';
 
                         if (email.isEmpty) {
-                          return 'Add meg az e-mail-címedet.';
+                          return 'Enter your email address.';
                         }
 
-                        final emailPattern = RegExp(
+                        final RegExp emailPattern = RegExp(
                           r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                         );
 
                         if (!emailPattern.hasMatch(email)) {
-                          return 'Adj meg egy érvényes e-mail-címet.';
+                          return 'Enter a valid email address.';
                         }
 
                         return null;
@@ -194,25 +183,19 @@ class _ForgotPasswordScreenState
                     ),
                     const SizedBox(height: 24),
                     FilledButton(
-                      onPressed:
-                          _isLoading ? null : _sendResetEmail,
+                      onPressed: _isLoading ? null : _sendResetEmail,
                       style: FilledButton.styleFrom(
-                        minimumSize:
-                            const Size.fromHeight(52),
+                        minimumSize: const Size.fromHeight(52),
                       ),
                       child: _isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child:
-                                  CircularProgressIndicator(
+                          ? const SizedBox.square(
+                              dimension: 22,
+                              child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'Visszaállító link küldése',
-                            ),
+                          : const Text('Send reset link'),
                     ),
                     if (_emailSent) ...[
                       const SizedBox(height: 24),
@@ -220,8 +203,7 @@ class _ForgotPasswordScreenState
                         child: Padding(
                           padding: EdgeInsets.all(16),
                           child: Row(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Icon(
                                 Icons.mark_email_read_outlined,
@@ -230,8 +212,7 @@ class _ForgotPasswordScreenState
                               SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Ellenőrizd a beérkező leveleket '
-                                  'és a spam mappát is.',
+                                  'Check your inbox and spam folder.',
                                 ),
                               ),
                             ],
@@ -246,9 +227,7 @@ class _ForgotPasswordScreenState
                           : () {
                               Navigator.of(context).pop();
                             },
-                      child: const Text(
-                        'Vissza a bejelentkezéshez',
-                      ),
+                      child: const Text('Back to login'),
                     ),
                   ],
                 ),
