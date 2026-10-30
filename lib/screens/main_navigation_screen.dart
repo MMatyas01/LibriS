@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../widgets/bottom_navbar.dart';
@@ -14,14 +13,24 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
+  
+  // Nem lehet const, mert a HomeScreen most már kap egy függvényt
+  late final List<Widget> _screens;
 
-  static const List<Widget> _screens = [
-    HomeScreen(),
-    _PlaceholderScreen(title: 'My Library'),
-    _PlaceholderScreen(title: 'Discover'),
-    _PlaceholderScreen(title: 'Community'),
-    _PlaceholderScreen(title: 'Profile'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Inicializáljuk a listát az initState-ben
+    _screens = [
+      HomeScreen(
+        onNavigateToTab: _onItemSelected, // Átadjuk a fülváltó függvényt
+      ),
+      const _PlaceholderScreen(title: 'My Library'),
+      const _PlaceholderScreen(title: 'Discover'),
+      const _PlaceholderScreen(title: 'Community'),
+      const _PlaceholderScreen(title: 'Profile'),
+    ];
+  }
 
   void _onItemSelected(int index) {
     setState(() {
