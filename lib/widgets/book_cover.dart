@@ -17,10 +17,9 @@ class BookCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
+    final cover = AspectRatio(
       aspectRatio: aspectRatio,
       child: Container(
-        width: width,
         decoration: BoxDecoration(
           color: AppColors.sage,
           borderRadius: BorderRadius.circular(borderRadius),
@@ -50,5 +49,10 @@ class BookCover extends StatelessWidget {
               ),
       ),
     );
+
+    if (width != null) {
+      return SizedBox(width: width, child: cover);
+    }
+    return cover;
   }
 }

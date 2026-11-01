@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import 'main_navigation_screen.dart'; // Módosítva: Main-re navigálunk
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -52,9 +52,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
+      // Módosítva: A MainNavigationScreen-re navigálunk
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) => const HomeScreen(),
+          builder: (_) => const MainNavigationScreen(),
         ),
         (route) => false,
       );
