@@ -63,6 +63,20 @@ class _LoginScreenState extends State<LoginScreen> {
           builder: (_) => const MainNavigationScreen(),
         ),
       );
+    } on EmailNotVerifiedException catch (error) {
+      // Ez az új hibakezelés, ami az auth_service-ből érkezik
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(error.message),
+            // A téma beépített hiba színét használjuk, így nem kell AppColors.error
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
     } on FirebaseAuthException catch (error) {
       if (!mounted) {
         return;

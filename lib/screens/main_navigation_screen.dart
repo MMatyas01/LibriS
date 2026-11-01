@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/bottom_navbar.dart';
 import 'home_screen.dart';
+import 'my_library_screen.dart'; // Ezt add hozzá
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -25,7 +26,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       HomeScreen(
         onNavigateToTab: _onItemSelected, // Átadjuk a fülváltó függvényt
       ),
-      const _PlaceholderScreen(title: 'My Library'),
+      const MyLibraryScreen(),
       const _PlaceholderScreen(title: 'Discover'),
       const _PlaceholderScreen(title: 'Community'),
       const _PlaceholderScreen(title: 'Profile'),
