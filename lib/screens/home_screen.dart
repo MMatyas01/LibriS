@@ -1,4 +1,4 @@
-import 'dart:math';
+// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,12 +26,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Real-time streamek – a Home tabváltás nélkül is frissül
   Stream<Map<String, dynamic>?>? _continueReadingStream;
   Stream<List<Map<String, dynamic>>>? _libraryStream;
 
-  // Popular ajánló marad egyszeri Future (nincs real-time igény)
-  Future<Map<String, dynamic>?>? _popularBookFuture;
+  String _username = 'Reader';
+  String _initials = 'R';
 
   @override
   void initState() {
@@ -40,8 +39,22 @@ class _HomeScreenState extends State<HomeScreen> {
     if (currentUser != null) {
       _continueReadingStream = _continueReadingSnapshot(currentUser.uid);
       _libraryStream = _librarySnapshot(currentUser.uid);
-      _popularBookFuture = _fetchPopularBook();
+      _listenToUserProfile(currentUser.uid);
     }
+  }
+
+  void _listenToUserProfile(String userId) {
+    _firestore.collection('users').doc(userId).snapshots().listen((snapshot) {
+      if (snapshot.exists && mounted) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        final fetchedName = data['username'] ?? 'Reader';
+        
+        setState(() {
+          _username = fetchedName;
+          _initials = fetchedName.isNotEmpty ? fetchedName[0].toUpperCase() : 'R';
+        });
+      }
+    });
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -56,7 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- REAL-TIME: legutóbb olvasott könyv ---
   Stream<Map<String, dynamic>?> _continueReadingSnapshot(String userId) {
     return _firestore
         .collection('library_entries')
@@ -66,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .asyncMap((snapshot) async {
       if (snapshot.docs.isEmpty) return null;
 
-      // Rendezés Dart oldalon: lastReadAt, fallback addedAt, csökkenő
       final sortedDocs = snapshot.docs.toList()
         ..sort((a, b) {
           final aData = a.data();
@@ -94,41 +105,62 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // --- REAL-TIME: teljes library ---
+  // --- MÓDOSÍTOTT: Duplikátumok kiszűrése bookId alapján ---
   Stream<List<Map<String, dynamic>>> _librarySnapshot(String userId) {
     return _firestore
         .collection('library_entries')
         .where('userId', isEqualTo: userId)
         .snapshots()
         .asyncMap((snapshot) async {
-      List<Map<String, dynamic>> results = [];
+      // Map a duplikátumok kiszűréséhez: bookId -> a legjobb entry
+      Map<String, Map<String, dynamic>> uniqueBooks = {};
 
       for (var doc in snapshot.docs) {
         final entry = doc.data();
-        final bookDoc =
-            await _firestore.collection('books').doc(entry['bookId']).get();
+        final bookId = entry['bookId'] as String;
+        final bookDoc = await _firestore.collection('books').doc(bookId).get();
 
         if (bookDoc.exists) {
-          results.add({
+          final newEntry = {
             'entry': entry,
             'book': bookDoc.data(),
-          });
+          };
+
+          if (!uniqueBooks.containsKey(bookId)) {
+            uniqueBooks[bookId] = newEntry;
+          } else {
+            // Prioritás: reading > want_to_read > finished
+            int getPriority(String? status) {
+              if (status == 'reading') return 3;
+              if (status == 'want_to_read') return 2;
+              if (status == 'finished') return 1;
+              return 0;
+            }
+
+            final existingEntry = uniqueBooks[bookId]!['entry'];
+            final existingStatus = existingEntry['status'];
+            final newStatus = entry['status'];
+
+            if (getPriority(newStatus) > getPriority(existingStatus)) {
+              uniqueBooks[bookId] = newEntry;
+            } else if (getPriority(newStatus) == getPriority(existingStatus)) {
+              // Ha ugyanaz a prioritás, a frissebb lastReadAt nyer
+              final existingTime = (existingEntry['lastReadAt'] as Timestamp?)?.toDate() ??
+                  (existingEntry['addedAt'] as Timestamp?)?.toDate() ??
+                  DateTime.fromMillisecondsSinceEpoch(0);
+              final newTime = (entry['lastReadAt'] as Timestamp?)?.toDate() ??
+                  (entry['addedAt'] as Timestamp?)?.toDate() ??
+                  DateTime.fromMillisecondsSinceEpoch(0);
+              if (newTime.isAfter(existingTime)) {
+                uniqueBooks[bookId] = newEntry;
+              }
+            }
+          }
         }
       }
-      return results;
-    });
-  }
 
-  Future<Map<String, dynamic>?> _fetchPopularBook() async {
-    try {
-      final snapshot = await _firestore.collection('books').limit(10).get();
-      if (snapshot.docs.isEmpty) return null;
-      final randomIndex = Random().nextInt(snapshot.docs.length);
-      return snapshot.docs[randomIndex].data();
-    } catch (e) {
-      debugPrint('Error fetching popular book: $e');
-      return null;
-    }
+      return uniqueBooks.values.toList();
+    });
   }
 
   String _getGreeting() {
@@ -136,22 +168,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Good morning';
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
-  }
-
-  String _getUserName(User? user) {
-    if (user?.displayName != null && user!.displayName!.isNotEmpty) {
-      return user.displayName!.split(' ').first;
-    }
-    if (user?.email != null) {
-      String emailPrefix = user!.email!.split('@').first;
-      return emailPrefix[0].toUpperCase() + emailPrefix.substring(1);
-    }
-    return 'Reader';
-  }
-
-  String _getInitials(User? user) {
-    String name = _getUserName(user);
-    return name.isNotEmpty ? name[0].toUpperCase() : 'R';
   }
 
   @override
@@ -164,8 +180,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final userName = _getUserName(currentUser);
-    final userInitials = _getInitials(currentUser);
     final greeting = _getGreeting();
 
     return Scaffold(
@@ -176,7 +190,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -191,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '$greeting, $userName.',
+                        '$greeting, $_username.',
                         style: theme.textTheme.bodyLarge,
                       ),
                       Text(
@@ -200,16 +213,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  UserAvatar(initials: userInitials, radius: 24),
+                  UserAvatar(initials: _initials, radius: 24),
                 ],
               ),
               const SizedBox(height: 32),
 
-              // --- CONTINUE READING (StreamBuilder) ---
-              SectionHeader(
+              const SectionHeader(
                 title: 'Continue reading',
-                actionText: 'View all',
-                onActionTap: () => widget.onNavigateToTab(1),
               ),
               const SizedBox(height: 16),
               StreamBuilder<Map<String, dynamic>?>(
@@ -252,8 +262,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          // A stream automatikusan frissül a mentés után,
-                          // nincs szükség manuális újratöltésre.
                           await showUpdateProgressSheet(
                             context: context,
                             entryId: entryId,
@@ -280,7 +288,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 32),
 
-              // --- YOUR LIBRARY (StreamBuilder) ---
               SectionHeader(
                 title: 'Your library',
                 actionText: 'View all',
@@ -339,101 +346,183 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 32),
 
-              // --- POPULAR THIS WEEK (Future marad) ---
               SectionHeader(
                 title: 'Popular this week',
                 actionText: 'Explore',
                 onActionTap: () => widget.onNavigateToTab(2),
               ),
               const SizedBox(height: 16),
-              FutureBuilder<Map<String, dynamic>?>(
-                future: _popularBookFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError ||
-                      !snapshot.hasData ||
-                      snapshot.data == null) {
-                    return const Text('No popular books available right now.');
-                  }
+              
+              StreamBuilder<QuerySnapshot>(
+                stream: _firestore.collection('reviews').snapshots(),
+                builder: (context, reviewsSnapshot) {
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: _firestore.collection('review_comments').snapshots(),
+                    builder: (context, commentsSnapshot) {
+                      if (reviewsSnapshot.connectionState == ConnectionState.waiting || 
+                          commentsSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                  final book = snapshot.data!;
-                  final imageUrl = book['coverUrl'];
-                  final title = book['title'] ?? 'Unknown Title';
-                  final author = book['author'] ?? 'Unknown Author';
-                  final description =
-                      book['description'] ?? 'No description available.';
+                      final oneWeekAgo = DateTime.now().subtract(const Duration(days: 7));
+                      Map<String, int> activityMap = {};
 
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: imageUrl != null && imageUrl.toString().isNotEmpty
-                            ? Image.network(
-                                imageUrl,
-                                width: 80,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 80,
-                                    height: 120,
-                                    color: AppColors.sage,
-                                    child: const Icon(Icons.book,
-                                        color: AppColors.forest),
-                                  );
-                                },
-                              )
-                            : Container(
-                                width: 80,
-                                height: 120,
-                                color: AppColors.sage,
-                                child: const Icon(Icons.book,
-                                    color: AppColors.forest),
+                      if (reviewsSnapshot.hasData) {
+                        for (var doc in reviewsSnapshot.data!.docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+                          if (createdAt != null && createdAt.isAfter(oneWeekAgo)) {
+                            final bookId = data['bookId'];
+                            if (bookId != null) {
+                              activityMap[bookId] = (activityMap[bookId] ?? 0) + 1;
+                            }
+                          }
+                        }
+                      }
+
+                      if (commentsSnapshot.hasData && reviewsSnapshot.hasData) {
+                        Map<String, String> reviewToBook = {};
+                        for (var doc in reviewsSnapshot.data!.docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          reviewToBook[doc.id] = data['bookId'];
+                        }
+
+                        for (var doc in commentsSnapshot.data!.docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+                          if (createdAt != null && createdAt.isAfter(oneWeekAgo)) {
+                            final reviewId = data['reviewId'];
+                            final bookId = reviewToBook[reviewId];
+                            if (bookId != null) {
+                              activityMap[bookId] = (activityMap[bookId] ?? 0) + 1;
+                            }
+                          }
+                        }
+                      }
+
+                      String? popularBookId;
+                      int maxActivity = 0;
+                      activityMap.forEach((bookId, count) {
+                        if (count > maxActivity) {
+                          maxActivity = count;
+                          popularBookId = bookId;
+                        }
+                      });
+
+                      if (popularBookId == null) {
+                        return const Text('No popular books this week.');
+                      }
+
+                      return FutureBuilder<DocumentSnapshot>(
+                        future: _firestore.collection('books').doc(popularBookId).get(),
+                        builder: (context, bookSnapshot) {
+                          if (bookSnapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (!bookSnapshot.hasData || !bookSnapshot.data!.exists) {
+                            return const Text('No popular books available right now.');
+                          }
+
+                          final book = bookSnapshot.data!.data() as Map<String, dynamic>;
+                          
+                          double avgRating = 0.0;
+                          int reviewCount = 0;
+                          if (reviewsSnapshot.hasData) {
+                            double total = 0;
+                            for (var doc in reviewsSnapshot.data!.docs) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              if (data['bookId'] == popularBookId) {
+                                total += (data['rating'] ?? 0).toDouble();
+                                reviewCount++;
+                              }
+                            }
+                            if (reviewCount > 0) {
+                              avgRating = total / reviewCount;
+                            }
+                          }
+
+                          final imageUrl = book['coverUrl'];
+                          final title = book['title'] ?? 'Unknown Title';
+                          final author = book['author'] ?? 'Unknown Author';
+                          final description = book['description'] ?? 'No description available.';
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: imageUrl != null && imageUrl.toString().isNotEmpty
+                                    ? Image.network(
+                                        imageUrl,
+                                        width: 80,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            width: 80,
+                                            height: 120,
+                                            color: AppColors.sage,
+                                            child: const Icon(Icons.book, color: AppColors.forest),
+                                          );
+                                        },
+                                      )
+                                    : Container(
+                                        width: 80,
+                                        height: 120,
+                                        color: AppColors.sage,
+                                        child: const Icon(Icons.book, color: AppColors.forest),
+                                      ),
                               ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: theme.textTheme.titleMedium,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    author,
-                                    style: theme.textTheme.bodyMedium,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: theme.textTheme.titleMedium,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            author,
+                                            style: theme.textTheme.bodyMedium,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Icon(
+                                          reviewCount > 0 ? Icons.star : Icons.star_border, 
+                                          color: reviewCount > 0 ? Colors.amber : Colors.grey, 
+                                          size: 16
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          reviewCount > 0 ? avgRating.toStringAsFixed(1) : 'None',
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      description,
+                                      style: theme.textTheme.bodyMedium,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.star,
-                                    color: Colors.amber, size: 16),
-                                const Text('4.5',
-                                    style: TextStyle(fontSize: 14)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              description,
-                              style: theme.textTheme.bodyMedium,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
                   );
                 },
               ),

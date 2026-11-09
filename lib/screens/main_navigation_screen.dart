@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../widgets/bottom_navbar.dart';
 import 'home_screen.dart';
 import 'my_library_screen.dart';
+import 'discover_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -22,8 +23,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     super.initState();
     _screens = [
       HomeScreen(onNavigateToTab: _onItemSelected),
-      MyLibraryScreen(onNavigateToTab: _onItemSelected), // MÓDOSÍTVA
-      const _PlaceholderScreen(title: 'Discover'),
+      MyLibraryScreen(onNavigateToTab: _onItemSelected),
+      // MÓDOSÍTVA: Átadjuk a navigációt a Discover-nek is
+      DiscoverScreen(onNavigateToTab: _onItemSelected),
       const _PlaceholderScreen(title: 'Community'),
       const _PlaceholderScreen(title: 'Profile'),
     ];

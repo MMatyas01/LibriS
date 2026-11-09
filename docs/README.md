@@ -25,3 +25,5 @@ A képernyők a felhasználói folyamat (user flow) sorrendjében vannak listáz
 7. [Home](screens/07_home.md)
 8. [Discover](screens/08_discover.md)
 9. [My Library](screens/09_my_library.md)
+10. [Book Details](screens/10_book_details.md)
+11. [Review Details](screens/11_review_details.md)
