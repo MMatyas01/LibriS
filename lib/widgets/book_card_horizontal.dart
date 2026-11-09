@@ -1,3 +1,4 @@
+// lib/widgets/book_card_horizontal.dart
 import 'package:flutter/material.dart';
 
 class BookCardHorizontal extends StatelessWidget {
@@ -11,8 +12,6 @@ class BookCardHorizontal extends StatelessWidget {
   final Widget? trailingWidget;
   final Widget? topRightWidget;
   final String? description;
-  
-  // ÚJ: Hányszor olvasták el (csak akkor jelenik meg, ha > 1)
   final int? readCount;
 
   const BookCardHorizontal({
@@ -37,144 +36,164 @@ class BookCardHorizontal extends StatelessWidget {
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Borítókép
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 80,
-                    height: 120,
-                    child: imageUrl != null && imageUrl!.isNotEmpty
-                        ? Image.network(
-                            imageUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.book, color: Colors.grey),
-                              );
-                            },
-                          )
-                        : Container(
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.book, color: Colors.grey),
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-
-                // Szöveges rész
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: topRightWidget != null ? 32 : 0,
+      // A LayoutBuilderrel dinamikusan méretezzük a borítót a rendelkezésre álló helyhez képest
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // A borító a kártya szélességének ~22%-a lesz, 
+          // de minimum 60, maximum 100 pixel (hogy mobilon és tableten is jól nézzen ki)
+          final double calculatedWidth = (constraints.maxWidth * 0.22).clamp(60.0, 100.0);
+          
+          return Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Dinamikus méretű borítókép
+                    SizedBox(
+                      width: calculatedWidth,
+                      child: AspectRatio(
+                        aspectRatio: 2 / 3, // Megtartja a klasszikus könyvborító arányt (pl. 80x120)
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: imageUrl != null && imageUrl!.isNotEmpty
+                              ? Image.network(
+                                  imageUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.book, color: Colors.grey),
+                                    );
+                                  },
+                                )
+                              : Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.book, color: Colors.grey),
+                                ),
+                        ),
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 16),
+
+                    // Jobb oldali szöveges rész és gombok
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: topRightWidget != null ? 32 : 0,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          author,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: textColor.withValues(alpha: 0.7),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        
-                        // ÚJ: Többszöri olvasás jelzése
-                        if (readCount != null && readCount! > 1) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.check_circle_outline,
-                                size: 14,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              author,
+                              style: TextStyle(
+                                fontSize: 14,
                                 color: textColor.withValues(alpha: 0.7),
                               ),
-                              const SizedBox(width: 4),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            
+                            // Többszöri olvasás jelzése
+                            if (readCount != null && readCount! > 1) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline,
+                                    size: 14,
+                                    color: textColor.withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Read $readCount times',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textColor.withValues(alpha: 0.7),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+
+                            // Leírás
+                            if (description != null && description!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
                               Text(
-                                'Read $readCount times',
+                                description!,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: textColor.withValues(alpha: 0.7),
+                                  color: textColor.withValues(alpha: 0.8),
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                            
+                            // Olvasási folyamat szövege
+                            if (progressText != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                progressText!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: textColor,
                                 ),
                               ),
                             ],
-                          ),
-                        ],
-
-                        if (description != null && description!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            description!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: textColor.withValues(alpha: 0.8),
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        if (progressText != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            progressText!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: textColor,
-                            ),
-                          ),
-                        ],
-                        if (progressValue != null) ...[
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: progressValue,
-                              backgroundColor: textColor.withValues(alpha: 0.2),
-                              valueColor: AlwaysStoppedAnimation<Color>(textColor),
-                              minHeight: 6,
-                            ),
-                          ),
-                        ],
-                        if (trailingWidget != null) ...[
-                          const SizedBox(height: 12),
-                          trailingWidget!,
-                        ],
-                      ],
+                            
+                            // Olvasási folyamat csík
+                            if (progressValue != null) ...[
+                              const SizedBox(height: 4),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: progressValue,
+                                  backgroundColor: textColor.withValues(alpha: 0.2),
+                                  valueColor: AlwaysStoppedAnimation<Color>(textColor),
+                                  minHeight: 6,
+                                ),
+                              ),
+                            ],
+                            
+                            // Pl. "Resume reading" gomb, vagy státusz badge
+                            if (trailingWidget != null) ...[
+                              const SizedBox(height: 12),
+                              trailingWidget!,
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          if (topRightWidget != null)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: topRightWidget!,
-            ),
-        ],
+              ),
+              
+              // A jobb felső sarokban lévő ikon (pl. 3 pöttyös menü)
+              if (topRightWidget != null)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: topRightWidget!,
+                ),
+            ],
+          );
+        },
       ),
     );
   }

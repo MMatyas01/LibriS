@@ -1,3 +1,5 @@
+// lib/screens/my_library_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -30,11 +32,14 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
   List<Map<String, dynamic>> _allLibraryData = [];
 
   int _readingGoal = 12;
+  
+  // ÚJ: Stream feliratkozás a valós idejű frissítéshez
+  StreamSubscription? _librarySubscription;
 
   @override
   void initState() {
     super.initState();
-    _fetchLibraryData();
+    _listenToLibraryData();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -44,58 +49,56 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
 
   @override
   void dispose() {
+    _librarySubscription?.cancel(); // Leiratkozás a memóriaszivárgás elkerüléséhez
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchLibraryData() async {
+  void _listenToLibraryData() {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
-    try {
-      final userDoc =
-          await _firestore.collection('users').doc(currentUser.uid).get();
-      if (userDoc.exists) {
+    // Cél (readingGoal) lekérése a users kollekcióból (egyszeri)
+    _firestore.collection('users').doc(currentUser.uid).get().then((userDoc) {
+      if (userDoc.exists && mounted) {
         final userData = userDoc.data();
-        if (userData != null &&
-            userData.containsKey('readingGoal') &&
-            userData['readingGoal'] != null) {
-          _readingGoal = userData['readingGoal'] as int;
-        }
-      }
-
-      final entries = await _firestore
-          .collection('library_entries')
-          .where('userId', isEqualTo: currentUser.uid)
-          .get();
-
-      List<Map<String, dynamic>> results = [];
-
-      for (var doc in entries.docs) {
-        final entry = doc.data();
-        final bookDoc =
-            await _firestore.collection('books').doc(entry['bookId']).get();
-        if (bookDoc.exists) {
-          results.add({
-            'entryId': doc.id,
-            'entry': entry,
-            'book': bookDoc.data(),
+        if (userData != null && userData['readingGoal'] != null) {
+          setState(() {
+            _readingGoal = userData['readingGoal'] as int;
           });
         }
       }
+    });
 
-      if (mounted) {
-        setState(() {
-          _allLibraryData = results;
-          _isLoading = false;
+    // Könyvtár valós idejű figyelése
+    _librarySubscription = _firestore
+        .collection('library_entries')
+        .where('userId', isEqualTo: currentUser.uid)
+        .snapshots()
+        .asyncMap((snapshot) async {
+          List<Map<String, dynamic>> results = [];
+          for (var doc in snapshot.docs) {
+            final entry = doc.data();
+            final bookDoc =
+                await _firestore.collection('books').doc(entry['bookId']).get();
+            if (bookDoc.exists) {
+              results.add({
+                'entryId': doc.id,
+                'entry': entry,
+                'book': bookDoc.data(),
+              });
+            }
+          }
+          return results;
+        })
+        .listen((results) {
+          if (mounted) {
+            setState(() {
+              _allLibraryData = results;
+              _isLoading = false;
+            });
+          }
         });
-      }
-    } catch (e) {
-      debugPrint('Error fetching library: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 
   String get _searchHintText {
@@ -135,7 +138,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
 
       final result = <Map<String, dynamic>>[];
       for (var entryList in grouped.values) {
-        // Rendezzük, hogy a legutóbb olvasott legyen a domináns entry
         entryList.sort((a, b) {
           final aData = a['entry'];
           final bData = b['entry'];
@@ -160,7 +162,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
     return filtered;
   }
 
-  // --- Könyv törlése (több bejegyzés esetén is működik) ---
   Future<void> _confirmDelete(List<String> entryIds, String bookTitle) async {
     final isMultiple = entryIds.length > 1;
 
@@ -196,7 +197,8 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
       }
       await batch.commit();
 
-      await _fetchLibraryData();
+      // A _fetchLibraryData() hívás törölve, mert a Stream automatikusan frissít!
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Book removed from library.')),
@@ -215,7 +217,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
     }
   }
 
-  // --- Re-read megerősítő dialógus ---
   Future<bool> _confirmReRead() async {
     final result = await showDialog<bool>(
       context: context,
@@ -237,7 +238,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
     return result ?? false;
   }
 
-  // --- Re-read (A) opció: új want_to_read entry létrehozása) ---
   Future<void> _reReadBook({
     required String bookId,
     required String bookTitle,
@@ -258,7 +258,9 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
         'addedAt': FieldValue.serverTimestamp(),
         'lastReadAt': FieldValue.serverTimestamp(),
       });
-      await _fetchLibraryData();
+      
+      // A _fetchLibraryData() hívás törölve
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Added to Want to read.')),
@@ -277,7 +279,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
     }
   }
 
-  // --- Want to read -> Reading ---
   Future<void> _startReading(String entryId) async {
     try {
       await _firestore.collection('library_entries').doc(entryId).update({
@@ -285,7 +286,9 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
         'currentPage': 0,
         'lastReadAt': FieldValue.serverTimestamp(),
       });
-      await _fetchLibraryData();
+      
+      // A _fetchLibraryData() hívás törölve
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Started reading!')),
@@ -321,9 +324,7 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
       coverUrl: coverUrl,
       currentStatus: status,
     );
-    if (saved) {
-      await _fetchLibraryData();
-    }
+    // A _fetchLibraryData() hívás törölve, a sheet bezárásakor a stream már frissített
   }
 
   @override
@@ -351,7 +352,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER (Logout eltávolítva) ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -466,7 +466,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
                     final status = entry['status'] as String? ?? 'reading';
                     final bookId = entry['bookId'] as String;
 
-                    // A csoportosított adatok kiolvasása
                     final readCount = data['readCount'] as int?;
                     final allEntryIds =
                         (data['allEntryIds'] as List<String>?) ?? [entryId];
@@ -519,7 +518,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
     );
   }
 
-  // --- Action button (ikonok nélkül, `finished` esetén null) ---
   Widget? _buildTrailingActions({
     required String status,
     required String entryId,
@@ -571,11 +569,9 @@ class _MyLibraryScreenState extends State<MyLibraryScreen> {
       );
     }
 
-    // finished – nincs action button
     return null;
   }
 
-  // --- Kebab menü (3 függőleges pont) ---
   Widget _buildKebabMenu({
     required List<String> entryIds,
     required String bookId,

@@ -10,6 +10,6 @@ A bejelentkezés utáni fő váz, ami összefogja az alsó menüsáv képernyői
 - **képernyők:**
   0. `HomeScreen` (Megvalósítva)
   1. `MyLibraryScreen` (Megvalósítva)
-  2. Discover (Placeholder)
+  2. `DiscoverScreen` (Megvalósítva)
   3. Community (Placeholder)
   4. Profile (Placeholder)
