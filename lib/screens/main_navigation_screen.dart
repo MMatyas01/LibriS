@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../widgets/bottom_navbar.dart';
 import 'home_screen.dart';
-import 'my_library_screen.dart'; // Ezt add hozzá
+import 'my_library_screen.dart'; 
+import 'profile_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -29,7 +30,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const MyLibraryScreen(),
       const _PlaceholderScreen(title: 'Discover'),
       const _PlaceholderScreen(title: 'Community'),
-      const _PlaceholderScreen(title: 'Profile'),
+      const ProfileScreen(),
     ];
   }
 
