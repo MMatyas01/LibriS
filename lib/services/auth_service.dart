@@ -14,7 +14,7 @@ class EmailNotVerifiedException implements Exception {
 
 class AuthService {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance; // ÚJ
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // A napló alapján a tesztfelhasználó megkerüli az ellenőrzést
   static const String _testUserEmail = 'teszt@libris.hu';
@@ -67,13 +67,14 @@ class AuthService {
     final user = credential.user;
 
     if (user != null) {
-      // 2. Firestore mentés (a képernyőkép alapján)
+      // 2. Firestore mentés
       await _firestore.collection('users').doc(user.uid).set({
         'email': email.trim(),
         'username': email.split('@').first, // Alapértelmezett név az e-mailből
         'profileImage': '',
         'accountVisibility': 'public',
         'createdAt': FieldValue.serverTimestamp(),
+        'readingGoal': null, // ÚJ: Alapértelmezetten üres (null)
       });
 
       // 3. Verifikációs e-mail kiküldése

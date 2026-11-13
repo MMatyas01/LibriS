@@ -4,6 +4,7 @@ import '../widgets/bottom_navbar.dart';
 import 'home_screen.dart';
 import 'my_library_screen.dart'; 
 import 'profile_screen.dart';
+import 'discover_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -15,20 +16,17 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
-  
-  // Nem lehet const, mert a HomeScreen most már kap egy függvényt
+
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
-    // Inicializáljuk a listát az initState-ben
     _screens = [
-      HomeScreen(
-        onNavigateToTab: _onItemSelected, // Átadjuk a fülváltó függvényt
-      ),
-      const MyLibraryScreen(),
-      const _PlaceholderScreen(title: 'Discover'),
+      HomeScreen(onNavigateToTab: _onItemSelected),
+      MyLibraryScreen(onNavigateToTab: _onItemSelected),
+      // MÓDOSÍTVA: Átadjuk a navigációt a Discover-nek is
+      DiscoverScreen(onNavigateToTab: _onItemSelected),
       const _PlaceholderScreen(title: 'Community'),
       const ProfileScreen(),
     ];
@@ -58,9 +56,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 class _PlaceholderScreen extends StatelessWidget {
   final String title;
 
-  const _PlaceholderScreen({
-    required this.title,
-  });
+  const _PlaceholderScreen({required this.title});
 
   @override
   Widget build(BuildContext context) {
