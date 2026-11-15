@@ -24,7 +24,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _screens = [
       HomeScreen(onNavigateToTab: _onItemSelected),
       MyLibraryScreen(onNavigateToTab: _onItemSelected),
-      // MÓDOSÍTVA: Átadjuk a navigációt a Discover-nek is
       DiscoverScreen(onNavigateToTab: _onItemSelected),
       const _PlaceholderScreen(title: 'Community'),
       const _PlaceholderScreen(title: 'Profile'),
