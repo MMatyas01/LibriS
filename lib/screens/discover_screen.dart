@@ -6,11 +6,13 @@ import '../theme/app_colors.dart';
 import '../widgets/search_bar.dart';
 import '../widgets/book_card_horizontal.dart';
 import 'book_details_screen.dart';
+import 'book_request_screen.dart';
+import 'book_recognition_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
-  final Function(int) onNavigateToTab; // ÚJ
+  final Function(int) onNavigateToTab;
 
-  const DiscoverScreen({super.key, required this.onNavigateToTab}); // ÚJ
+  const DiscoverScreen({super.key, required this.onNavigateToTab});
 
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
@@ -20,6 +22,27 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _searchQuery = '';
   final String? _userId = FirebaseAuth.instance.currentUser?.uid;
 
+  void _openBookRequest() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const BookRequestScreen(),
+      ),
+    );
+  }
+
+  // Módosítva: Átadjuk az onNavigateToTab-ot a felismerő képernyőnek!
+  void _openBookRecognition() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BookRecognitionScreen(
+          onNavigateToTab: widget.onNavigateToTab,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -27,6 +50,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
+      
+      // Lebegő kamera gomb a könyvfelismeréshez
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openBookRecognition,
+        backgroundColor: AppColors.forest,
+        foregroundColor: AppColors.white,
+        tooltip: 'Recognize a book',
+        child: const Icon(Icons.camera_alt),
+      ),
+      
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,21 +67,53 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             // 1. Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Discover',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: AppColors.charcoal,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Serif',
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Discover',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: AppColors.charcoal,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Serif',
+                          ),
+                        ),
+                        SizedBox(height: verticalGap / 2),
+                        const Text(
+                          'Find your next chapter.',
+                          style: TextStyle(
+                            color: AppColors.charcoal,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: verticalGap / 2),
-                  const Text(
-                    'Find your next chapter.',
-                    style: TextStyle(color: AppColors.charcoal, fontSize: 16),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Create request'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.forest,
+                      foregroundColor: AppColors.white,
+                      minimumSize: const Size(0, 36),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      textStyle: const TextStyle(
+                        fontFamily: 'Arial',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    onPressed: _openBookRequest,
                   ),
                 ],
               ),
@@ -60,7 +125,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: SearchBarWidget(
                 hintText: 'Search by title or author...',
-                trailingIcon: null, 
+                trailingIcon: null,
                 onChanged: (value) {
                   setState(() {
                     _searchQuery = value.toLowerCase();
@@ -90,17 +155,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             // 4. Book List
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('books').snapshots(),
+                stream:
+                    FirebaseFirestore.instance.collection('books').snapshots(),
                 builder: (context, booksSnapshot) {
-                  if (booksSnapshot.connectionState == ConnectionState.waiting) {
+                  if (booksSnapshot.connectionState ==
+                      ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (!booksSnapshot.hasData || booksSnapshot.data!.docs.isEmpty) {
+                  if (!booksSnapshot.hasData ||
+                      booksSnapshot.data!.docs.isEmpty) {
                     return const Center(child: Text('No books found.'));
                   }
 
                   return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('reviews').snapshots(),
+                    stream: FirebaseFirestore.instance
+                        .collection('reviews')
+                        .snapshots(),
                     builder: (context, reviewsSnapshot) {
                       Map<String, Map<String, dynamic>> bookStats = {};
                       if (reviewsSnapshot.hasData) {
@@ -128,36 +198,75 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           if (librarySnapshot.hasData) {
                             for (var doc in librarySnapshot.data!.docs) {
                               final data = doc.data() as Map<String, dynamic>;
-                              userLibraryStatus[data['bookId']] = data['status'];
+                              userLibraryStatus[data['bookId']] =
+                                  data['status'];
                             }
                           }
 
-                          List<QueryDocumentSnapshot> allBooks = booksSnapshot.data!.docs;
-                          List<QueryDocumentSnapshot> filteredBooks = allBooks.where((doc) {
+                          List<QueryDocumentSnapshot> allBooks =
+                              booksSnapshot.data!.docs;
+                          List<QueryDocumentSnapshot> filteredBooks =
+                              allBooks.where((doc) {
                             final data = doc.data() as Map<String, dynamic>;
-                            final title = (data['title'] ?? '').toString().toLowerCase();
-                            final author = (data['author'] ?? '').toString().toLowerCase();
+                            final title =
+                                (data['title'] ?? '').toString().toLowerCase();
+                            final author =
+                                (data['author'] ?? '').toString().toLowerCase();
 
                             if (_searchQuery.isEmpty) return true;
-                            return title.contains(_searchQuery) || author.contains(_searchQuery);
+                            return title.contains(_searchQuery) ||
+                                author.contains(_searchQuery);
                           }).toList();
 
                           if (filteredBooks.isEmpty) {
-                            return const Center(child: Text('No matching books found.'));
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      "We couldn't find that book.",
+                                      style: TextStyle(
+                                        color: AppColors.charcoal,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextButton(
+                                      onPressed: _openBookRequest,
+                                      child: const Text(
+                                        'Request it instead',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
                           }
 
                           return ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 8,
+                            ),
                             itemCount: filteredBooks.length,
-                            separatorBuilder: (context, index) => SizedBox(height: verticalGap),
+                            separatorBuilder: (context, index) =>
+                                SizedBox(height: verticalGap),
                             itemBuilder: (context, index) {
                               final bookDoc = filteredBooks[index];
-                              final bookData = bookDoc.data() as Map<String, dynamic>;
+                              final bookData =
+                                  bookDoc.data() as Map<String, dynamic>;
                               final status = userLibraryStatus[bookDoc.id];
-                              
+
                               final stats = bookStats[bookDoc.id];
-                              final double avgRating = stats != null ? (stats['total'] / stats['count']) : 0.0;
-                              final int reviewCount = stats != null ? stats['count'] : 0;
+                              final double avgRating = stats != null
+                                  ? (stats['total'] / stats['count'])
+                                  : 0.0;
+                              final int reviewCount =
+                                  stats != null ? stats['count'] : 0;
 
                               return GestureDetector(
                                 onTap: () {
@@ -168,41 +277,62 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                         bookId: bookDoc.id,
                                         bookData: bookData,
                                         currentStatus: status,
-                                        onNavigateToTab: widget.onNavigateToTab, // ÁTADVA
+                                        onNavigateToTab: widget.onNavigateToTab,
                                       ),
                                     ),
                                   );
                                 },
                                 child: BookCardHorizontal(
                                   title: bookData['title'] ?? 'Unknown Title',
-                                  author: bookData['author'] ?? 'Unknown Author',
+                                  author:
+                                      bookData['author'] ?? 'Unknown Author',
                                   imageUrl: bookData['coverUrl'],
                                   backgroundColor: Colors.white,
                                   textColor: AppColors.charcoal,
                                   trailingWidget: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildStatusBadge(status),
                                       const SizedBox(height: 12),
                                       Row(
                                         children: [
                                           Icon(
-                                            reviewCount > 0 ? Icons.star : Icons.star_border, 
-                                            color: reviewCount > 0 ? Colors.orange : Colors.grey, 
-                                            size: 16
+                                            reviewCount > 0
+                                                ? Icons.star
+                                                : Icons.star_border,
+                                            color: reviewCount > 0
+                                                ? Colors.orange
+                                                : Colors.grey,
+                                            size: 16,
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
-                                            reviewCount > 0 ? avgRating.toStringAsFixed(1) : 'None',
+                                            reviewCount > 0
+                                                ? avgRating.toStringAsFixed(1)
+                                                : 'None',
                                             style: TextStyle(
-                                              color: reviewCount > 0 ? Colors.grey[700] : Colors.grey, 
-                                              fontSize: 13, 
-                                              fontWeight: FontWeight.bold
+                                              color: reviewCount > 0
+                                                  ? Colors.grey[700]
+                                                  : Colors.grey,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          const Text('View book details ', style: TextStyle(color: AppColors.forest, fontSize: 13, fontWeight: FontWeight.w600)),
-                                          const Icon(Icons.arrow_forward, color: AppColors.forest, size: 14),
+                                          const Text(
+                                            'View book details ',
+                                            style: TextStyle(
+                                              color: AppColors.forest,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.arrow_forward,
+                                            color: AppColors.forest,
+                                            size: 14,
+                                          ),
                                         ],
                                       ),
                                     ],
@@ -234,12 +364,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ),
         child: const Text(
           'Not in your library',
-          style: TextStyle(color: AppColors.forest, fontSize: 11, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            color: AppColors.forest,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       );
     }
 
-    String statusText = status == 'reading' ? 'Reading' : (status == 'finished' ? 'Finished' : 'Want to read');
+    String statusText = status == 'reading'
+        ? 'Reading'
+        : (status == 'finished' ? 'Finished' : 'Want to read');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -254,7 +390,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           const SizedBox(width: 4),
           Text(
             'In your library · $statusText',
-            style: const TextStyle(color: AppColors.forest, fontSize: 11, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: AppColors.forest,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
