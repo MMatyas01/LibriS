@@ -1,16 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'messages_screen.dart';
 
+import 'my_reviews_screen.dart';
 import '../services/auth_service.dart';
 import '../services/preferences_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/review_card.dart';
 import '../widgets/section_header.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/unread_messages_badge.dart';
 import 'edit_profile_screen.dart';
 import 'login_screen.dart';
+import 'messages_screen.dart';
 import 'privacy_settings_screen.dart';
+import 'review_details_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -30,6 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _readingGoal = 0;
   int _books = 0;
   int _finished = 0;
+  List<_ProfileReview> _reviews = <_ProfileReview>[];
 
   @override
   void initState() {
@@ -39,133 +44,152 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     final User? user = _firebaseAuth.currentUser;
-
     if (user == null) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
+    if (mounted) setState(() => _isLoading = true);
 
     try {
-      final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
-          await _firestore.collection('users').doc(user.uid).get();
+      final results = await Future.wait<dynamic>([
+        _firestore.collection('users').doc(user.uid).get(),
+        _firestore
+            .collection('library_entries')
+            .where('userId', isEqualTo: user.uid)
+            .get(),
+        _firestore
+            .collection('reviews')
+            .where('userId', isEqualTo: user.uid)
+            .get(),
+      ]);
 
-      final QuerySnapshot<Map<String, dynamic>> librarySnapshot =
-          await _firestore
-              .collection('library_entries')
-              .where('userId', isEqualTo: user.uid)
-              .get();
+      final userSnapshot = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final librarySnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
+      final reviewSnapshot = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
-      final Map<String, dynamic>? data = userSnapshot.data();
-      final String username = (data?['username'] as String? ?? '').trim();
+      final Map<String, dynamic>? userData = userSnapshot.data();
+      final String username = (userData?['username'] as String? ?? '').trim();
       final String profileImage =
-          (data?['profileImage'] as String? ?? '').trim();
-      final Object? readingGoalValue = data?['readingGoal'];
+          (userData?['profileImage'] as String? ?? '').trim();
+      final Object? goalValue = userData?['readingGoal'];
 
-      final int readingGoal =
-          readingGoalValue is num ? readingGoalValue.toInt() : 0;
+      final int finished = librarySnapshot.docs
+          .where((doc) => doc.data()['status'] == 'finished')
+          .length;
 
-      final int finished = librarySnapshot.docs.where((document) {
-        return document.data()['status'] == 'finished';
-      }).length;
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> reviewDocs =
+          reviewSnapshot.docs.toList()
+            ..sort((a, b) {
+              final aDate = a.data()['createdAt'] as Timestamp?;
+              final bDate = b.data()['createdAt'] as Timestamp?;
+              return (bDate?.millisecondsSinceEpoch ?? 0)
+                  .compareTo(aDate?.millisecondsSinceEpoch ?? 0);
+            });
 
-      if (!mounted) {
-        return;
-      }
+      final List<_ProfileReview> reviews = await Future.wait(
+        reviewDocs.map((doc) async {
+          final Map<String, dynamic> review = doc.data();
+          final String bookId = (review['bookId'] as String? ?? '').trim();
+          String bookTitle = 'Unknown book';
+
+          if (bookId.isNotEmpty) {
+            final bookSnapshot =
+                await _firestore.collection('books').doc(bookId).get();
+            bookTitle =
+                (bookSnapshot.data()?['title'] as String? ?? 'Unknown book')
+                    .trim();
+          }
+
+          return _ProfileReview(
+            id: doc.id,
+            data: review,
+            bookTitle: bookTitle.isEmpty ? 'Unknown book' : bookTitle,
+          );
+        }),
+      );
+
+      if (!mounted) return;
 
       setState(() {
         _username =
             username.isNotEmpty ? username : _usernameFromEmail(user.email);
-        _email = (data?['email'] as String? ?? user.email ?? '').trim();
+        _email = (userData?['email'] as String? ?? user.email ?? '').trim();
         _profileImageUrl =
             profileImage.isNotEmpty ? profileImage : user.photoURL;
-        _readingGoal = readingGoal;
+        _readingGoal = goalValue is num ? goalValue.toInt() : 0;
         _books = librarySnapshot.size;
         _finished = finished;
+        _reviews = reviews;
         _isLoading = false;
       });
     } on FirebaseException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       _showMessage(error.message ?? 'Unable to load your profile.');
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       _showMessage('An unexpected error occurred while loading your profile.');
     }
   }
 
   String _usernameFromEmail(String? email) {
-    if (email == null || !email.contains('@')) {
-      return 'Reader';
-    }
-
-    final String value = email.split('@').first.trim();
+    if (email == null || !email.contains('@')) return 'Reader';
+    final value = email.split('@').first.trim();
     return value.isEmpty ? 'Reader' : value;
   }
 
   String _getInitials() {
-    final List<String> parts = _username
+    final parts = _username
         .trim()
         .split(RegExp(r'[\s._-]+'))
         .where((part) => part.isNotEmpty)
         .toList();
-
     if (parts.length >= 2) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     }
-
     if (parts.isNotEmpty && parts.first.length >= 2) {
       return parts.first.substring(0, 2).toUpperCase();
     }
-
-    if (parts.isNotEmpty) {
-      return parts.first[0].toUpperCase();
-    }
-
-    return 'LR';
+    return parts.isNotEmpty ? parts.first[0].toUpperCase() : 'LR';
   }
 
   Future<void> _openEditProfile() async {
-    final bool? updated = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => const EditProfileScreen(),
-      ),
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
-
     if (updated == true && mounted) {
       await _loadProfile();
-      if (mounted) {
-        _showMessage('Profile updated successfully.');
-      }
+      if (mounted) _showMessage('Profile updated successfully.');
     }
   }
 
   Future<void> _openPrivacySettings() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const PrivacySettingsScreen(),
+      MaterialPageRoute(builder: (_) => const PrivacySettingsScreen()),
+    );
+  }
+
+  Future<void> _openReview(String reviewId) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ReviewDetailsScreen(reviewId: reviewId),
       ),
     );
+    if (mounted) await _loadProfile();
+  }
+
+  Future<void> _showAllReviews() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const MyReviewsScreen(),
+      ),
+    );
+
+    if (mounted) {
+      await _loadProfile();
+    }
   }
 
   void _showMessage(String message) {
@@ -174,45 +198,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _showUnavailableFeature(String message) {
-    _showMessage(message);
-  }
-
   Future<void> _showLogoutDialog() async {
-    final bool? shouldLogout = await showDialog<bool>(
+    final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Log out'),
-          content: const Text('Are you sure you want to log out?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Log out'),
-            ),
-          ],
-        );
-      },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
     );
 
-    if (shouldLogout != true || !mounted) {
-      return;
-    }
-
+    if (shouldLogout != true || !mounted) return;
     await AuthService().signOut();
     await PreferencesService().clearRememberMe();
-
-    if (!mounted) {
-      return;
-    }
-
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-      (route) => false,
+      (_) => false,
     );
   }
 
@@ -228,9 +239,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onRefresh: _loadProfile,
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final double horizontalPadding =
+                    final horizontalPadding =
                         (constraints.maxWidth * 0.06).clamp(16.0, 32.0);
-
                     return SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: EdgeInsets.fromLTRB(
@@ -260,8 +270,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               _ProfileActions(
                                 onEditProfile: _openEditProfile,
                                 onMessages: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
+                                  Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
                                       builder: (_) => const MessagesScreen(),
                                     ),
                                   );
@@ -271,22 +281,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               _ProfileStatistics(
                                 books: _books,
                                 finished: _finished,
-                                reviews: 0,
+                                reviews: _reviews.length,
                               ),
                               const SizedBox(height: 28),
                               SectionHeader(
                                 title: 'Your reviews',
                                 actionText: 'View all',
-                                onActionTap: () {
-                                  _showUnavailableFeature(
-                                    'Your complete review history will be available soon.',
-                                  );
-                                },
+                                onActionTap: _showAllReviews,
                               ),
                               const SizedBox(height: 12),
-                              const _EmptyReviewsCard(),
+                              if (_reviews.isEmpty)
+                                const _EmptyReviewsCard()
+                              else
+                                ..._reviews.take(3).map(
+                                      (review) => ReviewCard(
+                                        reviewId: review.id,
+                                        review: review.data,
+                                        showBookTitle: true,
+                                        bookTitle: review.bookTitle,
+                                        showActions: true,
+                                        onTap: () => _openReview(review.id),
+                                      ),
+                                    ),
                               const SizedBox(height: 20),
-                              _PrivacySettingsTile(onTap: _openPrivacySettings),
+                              _PrivacySettingsTile(
+                                onTap: _openPrivacySettings,
+                              ),
                               const SizedBox(height: 12),
                               _LogoutTile(onTap: _showLogoutDialog),
                             ],
@@ -302,9 +322,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+class _ProfileReview {
+  const _ProfileReview({
+    required this.id,
+    required this.data,
+    required this.bookTitle,
+  });
+
+  final String id;
+  final Map<String, dynamic> data;
+  final String bookTitle;
+}
+
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({required this.onSettingsPressed});
-
   final VoidCallback onSettingsPressed;
 
   @override
@@ -320,10 +351,7 @@ class _ProfileHeader extends StatelessWidget {
         IconButton(
           onPressed: onSettingsPressed,
           tooltip: 'Privacy settings',
-          icon: const Icon(
-            Icons.settings_outlined,
-            color: AppColors.forest,
-          ),
+          icon: const Icon(Icons.settings_outlined, color: AppColors.forest),
         ),
       ],
     );
@@ -347,9 +375,8 @@ class _ProfileIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String? usableImageUrl =
+    final usableImageUrl =
         imageUrl?.trim().isNotEmpty == true ? imageUrl : null;
-
     return Column(
       children: [
         UserAvatar(
@@ -394,7 +421,6 @@ class _ProfileActions extends StatelessWidget {
     required this.onEditProfile,
     required this.onMessages,
   });
-
   final VoidCallback onEditProfile;
   final VoidCallback onMessages;
 
@@ -411,10 +437,14 @@ class _ProfileActions extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onMessages,
-            icon: const Icon(Icons.chat_bubble_outline, size: 18),
-            label: const Text('Messages'),
+          child: UnreadMessagesBadge(
+            top: -7,
+            right: -7,
+            child: OutlinedButton.icon(
+              onPressed: onMessages,
+              icon: const Icon(Icons.chat_bubble_outline, size: 18),
+              label: const Text('Messages'),
+            ),
           ),
         ),
       ],
@@ -428,7 +458,6 @@ class _ProfileStatistics extends StatelessWidget {
     required this.finished,
     required this.reviews,
   });
-
   final int books;
   final int finished;
   final int reviews;
@@ -457,7 +486,6 @@ class _ProfileStatistics extends StatelessWidget {
 
 class _StatisticItem extends StatelessWidget {
   const _StatisticItem({required this.value, required this.label});
-
   final int value;
   final String label;
 
@@ -486,11 +514,9 @@ class _StatisticItem extends StatelessWidget {
 
 class _StatisticDivider extends StatelessWidget {
   const _StatisticDivider();
-
   @override
-  Widget build(BuildContext context) {
-    return Container(width: 1, height: 36, color: AppColors.inputBorder);
-  }
+  Widget build(BuildContext context) =>
+      Container(width: 1, height: 36, color: AppColors.inputBorder);
 }
 
 class _EmptyReviewsCard extends StatelessWidget {
@@ -533,7 +559,6 @@ class _EmptyReviewsCard extends StatelessWidget {
 
 class _PrivacySettingsTile extends StatelessWidget {
   const _PrivacySettingsTile({required this.onTap});
-
   final VoidCallback onTap;
 
   @override
@@ -574,7 +599,6 @@ class _PrivacySettingsTile extends StatelessWidget {
 
 class _LogoutTile extends StatelessWidget {
   const _LogoutTile({required this.onTap});
-
   final VoidCallback onTap;
 
   @override
@@ -582,10 +606,7 @@ class _LogoutTile extends StatelessWidget {
     return TextButton.icon(
       onPressed: onTap,
       icon: const Icon(Icons.logout, color: AppColors.error),
-      label: const Text(
-        'Log out',
-        style: TextStyle(color: AppColors.error),
-      ),
+      label: const Text('Log out', style: TextStyle(color: AppColors.error)),
     );
   }
 }

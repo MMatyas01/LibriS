@@ -1,10 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/message.dart';
 import '../services/message_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/book_cover.dart';
 import '../widgets/user_avatar.dart';
+import 'book_details_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -19,17 +22,12 @@ class ChatScreen extends StatefulWidget {
   final String otherProfileImage;
 
   @override
-  State<ChatScreen> createState() =>
-      _ChatScreenState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState
-    extends State<ChatScreen> {
-  final MessageService _messageService =
-      MessageService();
-
-  final FirebaseAuth _firebaseAuth =
-      FirebaseAuth.instance;
+class _ChatScreenState extends State<ChatScreen> {
+  final MessageService _messageService = MessageService();
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
 
   final TextEditingController _messageController =
       TextEditingController();
@@ -64,13 +62,11 @@ class _ChatScreenState
 
     try {
       final List<Message> messages =
-          await _messageService
-              .getConversation(
+          await _messageService.getConversation(
         widget.otherUserId,
       );
 
-      await _messageService
-          .markConversationAsRead(
+      await _messageService.markConversationAsRead(
         widget.otherUserId,
       );
 
@@ -118,6 +114,7 @@ class _ChatScreenState
       );
 
       _messageController.clear();
+
       await _loadConversation();
     } on Exception catch (error) {
       if (mounted) {
@@ -130,6 +127,73 @@ class _ChatScreenState
         setState(() {
           _isSending = false;
         });
+      }
+    }
+  }
+
+  Future<void> _openSharedBook(
+    Message message,
+  ) async {
+    final String? bookId = message.bookId;
+
+    if (bookId == null || bookId.isEmpty) {
+      _showMessage(
+        'This book is no longer available.',
+      );
+      return;
+    }
+
+    try {
+      final DocumentSnapshot<Map<String, dynamic>>
+          bookDocument =
+          await FirebaseFirestore.instance
+              .collection('books')
+              .doc(bookId)
+              .get();
+
+      if (!mounted) {
+        return;
+      }
+
+      final Map<String, dynamic>? bookData =
+          bookDocument.data();
+
+      if (!bookDocument.exists || bookData == null) {
+        _showMessage(
+          'This book is no longer available.',
+        );
+        return;
+      }
+
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) {
+            return BookDetailsScreen(
+              bookId: bookDocument.id,
+              bookData: bookData,
+            );
+          },
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      if (error.code == 'permission-denied') {
+        _showMessage(
+          'You do not have permission to open this book.',
+        );
+      } else {
+        _showMessage(
+          'Unable to open the shared book.',
+        );
+      }
+    } on Exception {
+      if (mounted) {
+        _showMessage(
+          'Unable to open the shared book.',
+        );
       }
     }
   }
@@ -166,8 +230,7 @@ class _ChatScreenState
                 ).pop(true);
               },
               style: FilledButton.styleFrom(
-                backgroundColor:
-                    AppColors.error,
+                backgroundColor: AppColors.error,
               ),
               child: const Text('Delete'),
             ),
@@ -196,18 +259,16 @@ class _ChatScreenState
   }
 
   void _scrollToBottom() {
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) {
         return;
       }
 
       _scrollController.animateTo(
-        _scrollController
-            .position
-            .maxScrollExtent,
-        duration:
-            const Duration(milliseconds: 250),
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(
+          milliseconds: 250,
+        ),
         curve: Curves.easeOut,
       );
     });
@@ -280,15 +341,13 @@ class _ChatScreenState
     final DateTime localDate =
         dateTime.toLocal();
 
-    final String hour =
-        localDate.hour
-            .toString()
-            .padLeft(2, '0');
+    final String hour = localDate.hour
+        .toString()
+        .padLeft(2, '0');
 
-    final String minute =
-        localDate.minute
-            .toString()
-            .padLeft(2, '0');
+    final String minute = localDate.minute
+        .toString()
+        .padLeft(2, '0');
 
     return '$hour:$minute';
   }
@@ -305,8 +364,7 @@ class _ChatScreenState
         title: Row(
           children: [
             UserAvatar(
-              initials:
-                  _otherUserInitials(),
+              initials: _otherUserInitials(),
               radius: 18,
               imageUrl:
                   widget.otherProfileImage.isEmpty
@@ -318,8 +376,7 @@ class _ChatScreenState
               child: Text(
                 widget.otherUsername,
                 maxLines: 1,
-                overflow:
-                    TextOverflow.ellipsis,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -344,8 +401,7 @@ class _ChatScreenState
                           CircularProgressIndicator(),
                     )
                   : RefreshIndicator(
-                      onRefresh:
-                          _loadConversation,
+                      onRefresh: _loadConversation,
                       child: _messages.isEmpty
                           ? const _EmptyChatView()
                           : ListView.builder(
@@ -363,14 +419,12 @@ class _ChatScreenState
                               ),
                               itemCount:
                                   _messages.length,
-                              itemBuilder:
-                                  (
-                                    BuildContext context,
-                                    int index,
-                                  ) {
+                              itemBuilder: (
+                                BuildContext context,
+                                int index,
+                              ) {
                                 final Message message =
-                                    _messages[
-                                        index];
+                                    _messages[index];
 
                                 final bool isOwn =
                                     message.senderId ==
@@ -383,6 +437,14 @@ class _ChatScreenState
                                       _formatMessageTime(
                                     message.sentAt,
                                   ),
+                                  onBookTap:
+                                      message.isBookMessage
+                                          ? () {
+                                              _openSharedBook(
+                                                message,
+                                              );
+                                            }
+                                          : null,
                                   onLongPress: isOwn
                                       ? () {
                                           _deleteMessage(
@@ -396,8 +458,7 @@ class _ChatScreenState
                     ),
             ),
             _MessageComposer(
-              controller:
-                  _messageController,
+              controller: _messageController,
               isSending: _isSending,
               onSend: _sendMessage,
             ),
@@ -413,12 +474,14 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isOwn,
     required this.formattedTime,
+    required this.onBookTap,
     required this.onLongPress,
   });
 
   final Message message;
   final bool isOwn;
   final String formattedTime;
+  final VoidCallback? onBookTap;
   final VoidCallback? onLongPress;
 
   @override
@@ -430,31 +493,25 @@ class _MessageBubble extends StatelessWidget {
       child: GestureDetector(
         onLongPress: onLongPress,
         child: Container(
-          constraints:
-              const BoxConstraints(
+          constraints: const BoxConstraints(
             maxWidth: 420,
           ),
-          margin:
-              const EdgeInsets.only(
+          margin: const EdgeInsets.only(
             bottom: 10,
           ),
-          padding:
-              const EdgeInsets.fromLTRB(
-            14,
-            10,
-            14,
+          padding: EdgeInsets.fromLTRB(
+            message.isBookMessage ? 8 : 14,
+            message.isBookMessage ? 8 : 10,
+            message.isBookMessage ? 8 : 14,
             8,
           ),
           decoration: BoxDecoration(
             color: isOwn
                 ? AppColors.forest
                 : AppColors.white,
-            borderRadius:
-                BorderRadius.only(
-              topLeft:
-                  const Radius.circular(16),
-              topRight:
-                  const Radius.circular(16),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
               bottomLeft: Radius.circular(
                 isOwn ? 16 : 4,
               ),
@@ -465,8 +522,7 @@ class _MessageBubble extends StatelessWidget {
             border: isOwn
                 ? null
                 : Border.all(
-                    color:
-                        AppColors.inputBorder,
+                    color: AppColors.inputBorder,
                   ),
           ),
           child: Column(
@@ -474,22 +530,26 @@ class _MessageBubble extends StatelessWidget {
                 CrossAxisAlignment.end,
             children: [
               Align(
-                alignment:
-                    Alignment.centerLeft,
-                child: Text(
-                  message.content,
-                  style: TextStyle(
-                    color: isOwn
-                        ? AppColors.white
-                        : AppColors.charcoal,
-                    height: 1.35,
-                  ),
-                ),
+                alignment: Alignment.centerLeft,
+                child: message.isBookMessage
+                    ? _SharedBookCard(
+                        message: message,
+                        isOwn: isOwn,
+                        onTap: onBookTap,
+                      )
+                    : Text(
+                        message.content,
+                        style: TextStyle(
+                          color: isOwn
+                              ? AppColors.white
+                              : AppColors.charcoal,
+                          height: 1.35,
+                        ),
+                      ),
               ),
               const SizedBox(height: 5),
               Row(
-                mainAxisSize:
-                    MainAxisSize.min,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     formattedTime,
@@ -528,8 +588,135 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-class _MessageComposer
-    extends StatelessWidget {
+class _SharedBookCard extends StatelessWidget {
+  const _SharedBookCard({
+    required this.message,
+    required this.isOwn,
+    required this.onTap,
+  });
+
+  final Message message;
+  final bool isOwn;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color primaryColor = isOwn
+        ? AppColors.white
+        : AppColors.charcoal;
+
+    final Color secondaryColor = isOwn
+        ? AppColors.white.withValues(
+            alpha: 0.75,
+          )
+        : AppColors.secondary;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 280,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isOwn
+                ? AppColors.white.withValues(
+                    alpha: 0.12,
+                  )
+                : AppColors.ivory,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isOwn
+                  ? AppColors.white.withValues(
+                      alpha: 0.25,
+                    )
+                  : AppColors.inputBorder,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              BookCover(
+                imageUrl: message.bookCoverUrl,
+                width: 58,
+                borderRadius: 7,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Shared a book',
+                      style: TextStyle(
+                        color: secondaryColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      message.bookTitle ??
+                          'Unknown title',
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: primaryColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      message.bookAuthor
+                                  ?.isNotEmpty ==
+                              true
+                          ? message.bookAuthor!
+                          : 'Unknown author',
+                      maxLines: 1,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: secondaryColor,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.open_in_new,
+                          size: 14,
+                          color: secondaryColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'View book',
+                          style: TextStyle(
+                            color: secondaryColor,
+                            fontSize: 12,
+                            fontWeight:
+                                FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageComposer extends StatelessWidget {
   const _MessageComposer({
     required this.controller,
     required this.isSending,
@@ -570,8 +757,7 @@ class _MessageComposer
               maxLength: 2000,
               textCapitalization:
                   TextCapitalization.sentences,
-              decoration:
-                  const InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Write a message...',
                 counterText: '',
                 border: OutlineInputBorder(),

@@ -75,8 +75,7 @@ class ProfileImageService {
       final Object? errorObject =
           decodedResponse['error'];
 
-      if (errorObject
-              is Map<String, dynamic> &&
+      if (errorObject is Map<String, dynamic> &&
           errorObject['message'] is String) {
         throw StateError(
           errorObject['message'] as String,

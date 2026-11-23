@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../services/profile_image_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/user_avatar.dart';
 
@@ -23,10 +27,8 @@ class _EditProfileScreenState
   final TextEditingController _usernameController =
       TextEditingController();
 
-  final TextEditingController _readingGoalController =
-      TextEditingController();
-
-  final TextEditingController _profileImageController =
+  final TextEditingController
+      _readingGoalController =
       TextEditingController();
 
   final FirebaseAuth _firebaseAuth =
@@ -35,11 +37,21 @@ class _EditProfileScreenState
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
+  final ImagePicker _imagePicker =
+      ImagePicker();
+
+  final ProfileImageService _profileImageService =
+      ProfileImageService();
+
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isSelectingImage = false;
 
   String _email = '';
   String? _profileImageUrl;
+
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
 
   @override
   void initState() {
@@ -51,12 +63,12 @@ class _EditProfileScreenState
   void dispose() {
     _usernameController.dispose();
     _readingGoalController.dispose();
-    _profileImageController.dispose();
     super.dispose();
   }
 
   Future<void> _loadProfile() async {
-    final User? user = _firebaseAuth.currentUser;
+    final User? user =
+        _firebaseAuth.currentUser;
 
     if (user == null) {
       if (mounted) {
@@ -69,8 +81,9 @@ class _EditProfileScreenState
     }
 
     try {
-      final DocumentSnapshot<Map<String, dynamic>>
-          snapshot = await _firestore
+      final DocumentSnapshot<
+          Map<String, dynamic>> snapshot =
+          await _firestore
               .collection('users')
               .doc(user.uid)
               .get();
@@ -79,10 +92,13 @@ class _EditProfileScreenState
           snapshot.data();
 
       final String username =
-          (data?['username'] as String? ?? '').trim();
+          (data?['username'] as String? ?? '')
+              .trim();
 
       final String profileImage =
-          (data?['profileImage'] as String? ?? '')
+          (data?['profileImage']
+                      as String? ??
+                  '')
               .trim();
 
       final Object? readingGoalValue =
@@ -102,36 +118,31 @@ class _EditProfileScreenState
       _usernameController.text =
           username.isNotEmpty
               ? username
-              : _usernameFromEmail(user.email);
+              : _usernameFromEmail(
+                  user.email,
+                );
 
       _readingGoalController.text =
           readingGoal.toString();
 
-      _profileImageController.text =
-          profileImage;
-
       _profileImageUrl =
-          profileImage.isNotEmpty
-              ? profileImage
-              : null;
+          profileImage.isEmpty
+              ? null
+              : profileImage;
     } on FirebaseException catch (error) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showMessage(
+          error.message ??
+              'Unable to load your profile.',
+        );
       }
-
-      _showMessage(
-        error.message ??
-            'Unable to load your profile.',
-      );
     } catch (_) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showMessage(
+          'An unexpected error occurred while '
+          'loading your profile.',
+        );
       }
-
-      _showMessage(
-        'An unexpected error occurred while '
-        'loading your profile.',
-      );
     } finally {
       if (mounted) {
         setState(() {
@@ -139,6 +150,81 @@ class _EditProfileScreenState
         });
       }
     }
+  }
+
+  Future<void> _selectProfileImage() async {
+    if (_isSelectingImage || _isSaving) {
+      return;
+    }
+
+    setState(() {
+      _isSelectingImage = true;
+    });
+
+    try {
+      final XFile? selectedImage =
+          await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        requestFullMetadata: false,
+      );
+
+      if (selectedImage == null) {
+        return;
+      }
+
+      final Uint8List imageBytes =
+          await selectedImage.readAsBytes();
+
+      if (imageBytes.isEmpty) {
+        throw StateError(
+          'The selected image is empty.',
+        );
+      }
+
+      if (imageBytes.length >
+          5 * 1024 * 1024) {
+        throw StateError(
+          'The selected image must be '
+          'smaller than 5 MB.',
+        );
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _selectedImage = selectedImage;
+        _selectedImageBytes = imageBytes;
+      });
+    } catch (error) {
+      if (mounted) {
+        _showMessage(
+          _readableError(error),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSelectingImage = false;
+        });
+      }
+    }
+  }
+
+  void _removeProfileImage() {
+    if (_isSaving) {
+      return;
+    }
+
+    setState(() {
+      _selectedImage = null;
+      _selectedImageBytes = null;
+      _profileImageUrl = null;
+    });
   }
 
   Future<void> _saveProfile() async {
@@ -151,11 +237,13 @@ class _EditProfileScreenState
       return;
     }
 
-    final User? user = _firebaseAuth.currentUser;
+    final User? user =
+        _firebaseAuth.currentUser;
 
     if (user == null) {
       _showMessage(
-        'You must be logged in to update your profile.',
+        'You must be logged in to '
+        'update your profile.',
       );
       return;
     }
@@ -174,21 +262,20 @@ class _EditProfileScreenState
         _readingGoalController.text.trim(),
       );
 
-      final String profileImageUrl =
-          _profileImageController.text.trim();
+      String profileImageUrl =
+          _profileImageUrl?.trim() ?? '';
 
-      /*
-       * This updates only fields that already exist
-       * in the current Firestore user structure.
-       *
-       * It does not create or modify:
-       * - updatedAt
-       * - displayName
-       * - bio
-       * - email
-       * - createdAt
-       * - accountVisibility
-       */
+      final XFile? selectedImage =
+          _selectedImage;
+
+      if (selectedImage != null) {
+        profileImageUrl =
+            await _profileImageService
+                .uploadProfileImage(
+          selectedImage,
+        );
+      }
+
       await _firestore
           .collection('users')
           .doc(user.uid)
@@ -206,23 +293,18 @@ class _EditProfileScreenState
 
       Navigator.of(context).pop(true);
     } on FirebaseException catch (error) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showMessage(
+          error.message ??
+              'Unable to update your profile.',
+        );
       }
-
-      _showMessage(
-        error.message ??
-            'Unable to update your profile.',
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
+    } catch (error) {
+      if (mounted) {
+        _showMessage(
+          _readableError(error),
+        );
       }
-
-      _showMessage(
-        'An unexpected error occurred while '
-        'saving your profile.',
-      );
     } finally {
       if (mounted) {
         setState(() {
@@ -242,15 +324,30 @@ class _EditProfileScreenState
       );
   }
 
-  void _clearProfileImage() {
-    setState(() {
-      _profileImageController.clear();
-      _profileImageUrl = null;
-    });
+  String _readableError(
+    Object error,
+  ) {
+    final String message =
+        error.toString();
+
+    if (message.startsWith(
+      'Bad state: ',
+    )) {
+      return message.replaceFirst(
+        'Bad state: ',
+        '',
+      );
+    }
+
+    return 'Unable to process the '
+        'selected profile image.';
   }
 
-  String _usernameFromEmail(String? email) {
-    if (email == null || !email.contains('@')) {
+  String _usernameFromEmail(
+    String? email,
+  ) {
+    if (email == null ||
+        !email.contains('@')) {
       return '';
     }
 
@@ -264,12 +361,14 @@ class _EditProfileScreenState
     final List<String> parts = username
         .split(RegExp(r'[\s._-]+'))
         .where(
-          (String part) => part.isNotEmpty,
+          (String part) =>
+              part.isNotEmpty,
         )
         .toList();
 
     if (parts.length >= 2) {
-      return '${parts.first[0]}${parts.last[0]}'
+      return '${parts.first[0]}'
+              '${parts.last[0]}'
           .toUpperCase();
     }
 
@@ -281,7 +380,8 @@ class _EditProfileScreenState
     }
 
     if (parts.isNotEmpty) {
-      return parts.first[0].toUpperCase();
+      return parts.first[0]
+          .toUpperCase();
     }
 
     if (_email.isNotEmpty) {
@@ -289,19 +389,6 @@ class _EditProfileScreenState
     }
 
     return 'LR';
-  }
-
-  bool _isValidHttpUrl(String value) {
-    final Uri? uri = Uri.tryParse(value);
-
-    if (uri == null) {
-      return false;
-    }
-
-    return uri.hasScheme &&
-        uri.hasAuthority &&
-        (uri.scheme == 'https' ||
-            uri.scheme == 'http');
   }
 
   @override
@@ -316,15 +403,18 @@ class _EditProfileScreenState
       body: SafeArea(
         child: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(),
+                child:
+                    CircularProgressIndicator(),
               )
             : LayoutBuilder(
                 builder: (
                   BuildContext context,
                   BoxConstraints constraints,
                 ) {
-                  final double horizontalPadding =
-                      (constraints.maxWidth * 0.06)
+                  final double
+                      horizontalPadding =
+                      (constraints.maxWidth *
+                              0.06)
                           .clamp(
                     16.0,
                     32.0,
@@ -334,7 +424,8 @@ class _EditProfileScreenState
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior
                             .onDrag,
-                    padding: EdgeInsets.fromLTRB(
+                    padding:
+                        EdgeInsets.fromLTRB(
                       horizontalPadding,
                       20,
                       horizontalPadding,
@@ -355,32 +446,40 @@ class _EditProfileScreenState
                             children: [
                               _buildAvatar(),
 
-                              const SizedBox(height: 28),
+                              const SizedBox(
+                                height: 28,
+                              ),
 
                               TextFormField(
-                                initialValue: _email,
+                                initialValue:
+                                    _email,
                                 enabled: false,
                                 decoration:
                                     const InputDecoration(
                                   labelText:
                                       'Email address',
                                   prefixIcon: Icon(
-                                    Icons.email_outlined,
+                                    Icons
+                                        .email_outlined,
                                   ),
                                   helperText:
                                       'Your email address '
-                                      'cannot be changed here.',
+                                      'cannot be changed '
+                                      'here.',
                                 ),
                               ),
 
-                              const SizedBox(height: 16),
+                              const SizedBox(
+                                height: 16,
+                              ),
 
                               TextFormField(
                                 controller:
                                     _usernameController,
                                 enabled: !_isSaving,
                                 textInputAction:
-                                    TextInputAction.next,
+                                    TextInputAction
+                                        .next,
                                 autocorrect: false,
                                 maxLength: 30,
                                 onChanged: (_) {
@@ -388,25 +487,35 @@ class _EditProfileScreenState
                                 },
                                 decoration:
                                     const InputDecoration(
-                                  labelText: 'Username',
-                                  hintText: 'reader_name',
+                                  labelText:
+                                      'Username',
+                                  hintText:
+                                      'reader_name',
                                   prefixIcon: Icon(
-                                    Icons.alternate_email,
+                                    Icons
+                                        .alternate_email,
                                   ),
                                 ),
                                 validator:
                                     (String? value) {
-                                  final String username =
-                                      value?.trim() ?? '';
+                                  final String
+                                      username =
+                                      value?.trim() ??
+                                          '';
 
-                                  if (username.isEmpty) {
-                                    return 'Enter a username.';
+                                  if (username
+                                      .isEmpty) {
+                                    return 'Enter a '
+                                        'username.';
                                   }
 
-                                  if (username.length < 3) {
-                                    return 'The username must '
-                                        'be at least 3 '
-                                        'characters long.';
+                                  if (username
+                                          .length <
+                                      3) {
+                                    return 'The username '
+                                        'must be at least '
+                                        '3 characters '
+                                        'long.';
                                   }
 
                                   final RegExp pattern =
@@ -414,109 +523,34 @@ class _EditProfileScreenState
                                     r'^[a-zA-Z0-9._-]+$',
                                   );
 
-                                  if (!pattern.hasMatch(
+                                  if (!pattern
+                                      .hasMatch(
                                     username,
                                   )) {
-                                    return 'Use only letters, '
-                                        'numbers, dots, '
-                                        'underscores, and '
-                                        'hyphens.';
+                                    return 'Use only '
+                                        'letters, numbers, '
+                                        'dots, underscores, '
+                                        'and hyphens.';
                                   }
 
                                   return null;
                                 },
                               ),
 
-                              const SizedBox(height: 16),
-
-                              TextFormField(
-                                controller:
-                                    _profileImageController,
-                                enabled: !_isSaving,
-                                keyboardType:
-                                    TextInputType.url,
-                                textInputAction:
-                                    TextInputAction.next,
-                                autocorrect: false,
-                                onChanged: (String value) {
-                                  final String url =
-                                      value.trim();
-
-                                  setState(() {
-                                    _profileImageUrl =
-                                        url.isEmpty
-                                            ? null
-                                            : url;
-                                  });
-                                },
-                                decoration:
-                                    InputDecoration(
-                                  labelText:
-                                      'Profile image URL',
-                                  hintText:
-                                      'https://i.imgur.com/example.jpeg',
-                                  prefixIcon: const Icon(
-                                    Icons.image_outlined,
-                                  ),
-                                  helperText:
-                                      'Enter a direct link to '
-                                      'a JPG, PNG, or WebP image.',
-                                  suffixIcon:
-                                      _profileImageController
-                                              .text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : IconButton(
-                                              onPressed:
-                                                  _isSaving
-                                                      ? null
-                                                      : _clearProfileImage,
-                                              tooltip:
-                                                  'Remove profile image',
-                                              icon:
-                                                  const Icon(
-                                                Icons
-                                                    .close,
-                                              ),
-                                            ),
-                                ),
-                                validator:
-                                    (String? value) {
-                                  final String url =
-                                      value?.trim() ?? '';
-
-                                  /*
-                                   * A profile image is
-                                   * optional. An empty value
-                                   * displays the initials.
-                                   */
-                                  if (url.isEmpty) {
-                                    return null;
-                                  }
-
-                                  if (!_isValidHttpUrl(
-                                    url,
-                                  )) {
-                                    return 'Enter a valid '
-                                        'HTTP or HTTPS '
-                                        'image URL.';
-                                  }
-
-                                  return null;
-                                },
+                              const SizedBox(
+                                height: 16,
                               ),
-
-                              const SizedBox(height: 16),
 
                               TextFormField(
                                 controller:
                                     _readingGoalController,
                                 enabled: !_isSaving,
                                 keyboardType:
-                                    TextInputType.number,
+                                    TextInputType
+                                        .number,
                                 textInputAction:
-                                    TextInputAction.done,
+                                    TextInputAction
+                                        .done,
                                 onFieldSubmitted: (_) {
                                   if (!_isSaving) {
                                     _saveProfile();
@@ -528,14 +562,16 @@ class _EditProfileScreenState
                                       'Annual reading goal',
                                   hintText: '12',
                                   prefixIcon: Icon(
-                                    Icons.flag_outlined,
+                                    Icons
+                                        .flag_outlined,
                                   ),
                                   suffixText: 'books',
                                 ),
                                 validator:
                                     (String? value) {
                                   final String input =
-                                      value?.trim() ?? '';
+                                      value?.trim() ??
+                                          '';
 
                                   if (input.isEmpty) {
                                     return 'Enter your '
@@ -543,7 +579,9 @@ class _EditProfileScreenState
                                   }
 
                                   final int? goal =
-                                      int.tryParse(input);
+                                      int.tryParse(
+                                    input,
+                                  );
 
                                   if (goal == null) {
                                     return 'Enter a valid '
@@ -551,34 +589,40 @@ class _EditProfileScreenState
                                   }
 
                                   if (goal < 0) {
-                                    return 'The reading goal '
-                                        'cannot be negative.';
+                                    return 'The reading '
+                                        'goal cannot be '
+                                        'negative.';
                                   }
 
                                   if (goal > 1000) {
-                                    return 'The reading goal '
-                                        'cannot be greater '
-                                        'than 1000.';
+                                    return 'The reading '
+                                        'goal cannot be '
+                                        'greater than '
+                                        '1000.';
                                   }
 
                                   return null;
                                 },
                               ),
 
-                              const SizedBox(height: 24),
+                              const SizedBox(
+                                height: 24,
+                              ),
 
                               FilledButton(
                                 onPressed: _isSaving
                                     ? null
                                     : _saveProfile,
                                 child: _isSaving
-                                    ? const SizedBox.square(
+                                    ? const SizedBox
+                                        .square(
                                         dimension: 22,
                                         child:
                                             CircularProgressIndicator(
                                           strokeWidth: 2,
                                           color:
-                                              AppColors.white,
+                                              AppColors
+                                                  .white,
                                         ),
                                       )
                                     : const Text(
@@ -598,33 +642,138 @@ class _EditProfileScreenState
   }
 
   Widget _buildAvatar() {
+    final Uint8List? selectedBytes =
+        _selectedImageBytes;
+
     final String? usableImageUrl =
-        _profileImageUrl?.trim().isNotEmpty == true &&
-                _isValidHttpUrl(
-                  _profileImageUrl!.trim(),
-                )
+        _profileImageUrl
+                    ?.trim()
+                    .isNotEmpty ==
+                true
             ? _profileImageUrl!.trim()
             : null;
 
     return Column(
       children: [
-        UserAvatar(
-          initials: _getInitials(),
-          radius: 46,
-          imageUrl: usableImageUrl,
+        Semantics(
+          button: true,
+          label: 'Change profile picture',
+          child: InkWell(
+            onTap: _isSelectingImage ||
+                    _isSaving
+                ? null
+                : _selectProfileImage,
+            customBorder:
+                const CircleBorder(),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                if (selectedBytes != null)
+                  CircleAvatar(
+                    radius: 48,
+                    backgroundColor:
+                        AppColors.sage,
+                    backgroundImage:
+                        MemoryImage(
+                      selectedBytes,
+                    ),
+                  )
+                else
+                  UserAvatar(
+                    initials: _getInitials(),
+                    radius: 48,
+                    imageUrl:
+                        usableImageUrl,
+                  ),
+
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          AppColors.forest,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color:
+                            AppColors.ivory,
+                        width: 3,
+                      ),
+                    ),
+                    child: _isSelectingImage
+                        ? const Padding(
+                            padding:
+                                EdgeInsets.all(
+                              7,
+                            ),
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color:
+                                  AppColors.white,
+                            ),
+                          )
+                        : const Icon(
+                            Icons
+                                .photo_library_outlined,
+                            size: 17,
+                            color:
+                                AppColors.white,
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
 
         const SizedBox(height: 12),
 
+        TextButton.icon(
+          onPressed: _isSelectingImage ||
+                  _isSaving
+              ? null
+              : _selectProfileImage,
+          icon: const Icon(
+            Icons.photo_library_outlined,
+          ),
+          label: const Text(
+            'Choose from gallery',
+          ),
+        ),
+
+        if (selectedBytes != null ||
+            usableImageUrl != null)
+          TextButton(
+            onPressed:
+                _isSaving
+                    ? null
+                    : _removeProfileImage,
+            child: const Text(
+              'Remove profile picture',
+              style: TextStyle(
+                color: AppColors.error,
+              ),
+            ),
+          ),
+
         Text(
-          usableImageUrl == null
-              ? 'Enter a direct image URL below '
-                  'to add a profile picture.'
-              : 'Profile image preview',
+          _selectedImage != null
+              ? 'The selected image will be '
+                  'uploaded when you save.'
+              : 'Tap the photo to choose a '
+                  'new profile picture.',
           textAlign: TextAlign.center,
           style:
-              Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.secondary,
+              Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(
+                    color:
+                        AppColors.secondary,
                   ),
         ),
       ],

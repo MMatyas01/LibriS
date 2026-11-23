@@ -7,16 +7,13 @@ class MessageService {
   MessageService({
     FirebaseFirestore? firestore,
     FirebaseAuth? firebaseAuth,
-  })  : _firestore =
-            firestore ?? FirebaseFirestore.instance,
-        _firebaseAuth =
-            firebaseAuth ?? FirebaseAuth.instance;
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _firebaseAuth;
 
-  CollectionReference<Map<String, dynamic>>
-      get _messages {
+  CollectionReference<Map<String, dynamic>> get _messages {
     return _firestore.collection('messages');
   }
 
@@ -38,11 +35,9 @@ class MessageService {
   }) async {
     final User user = _requireCurrentUser();
 
-    final String normalizedReceiverId =
-        receiverId.trim();
+    final String normalizedReceiverId = receiverId.trim();
 
-    final String normalizedContent =
-        content.trim();
+    final String normalizedContent = content.trim();
 
     if (normalizedReceiverId.isEmpty) {
       throw ArgumentError(
@@ -69,12 +64,13 @@ class MessageService {
       );
     }
 
-    final DocumentReference<Map<String, dynamic>>
-        document = await _messages.add(
+    final DocumentReference<Map<String, dynamic>> document =
+        await _messages.add(
       <String, dynamic>{
         'senderId': user.uid,
         'receiverId': normalizedReceiverId,
         'content': normalizedContent,
+        'type': 'text',
         'sentAt': FieldValue.serverTimestamp(),
         'isRead': false,
       },
@@ -83,34 +79,91 @@ class MessageService {
     return document.id;
   }
 
+Future<String> sendBookMessage({
+  required String receiverId,
+  required String bookId,
+  required String bookTitle,
+  required String bookAuthor,
+  String? bookCoverUrl,
+}) async {
+  final User user = _requireCurrentUser();
+
+  final String normalizedReceiverId = receiverId.trim();
+  final String normalizedBookId = bookId.trim();
+  final String normalizedBookTitle = bookTitle.trim();
+  final String normalizedBookAuthor = bookAuthor.trim();
+  final String? normalizedBookCoverUrl =
+      bookCoverUrl?.trim().isNotEmpty == true
+          ? bookCoverUrl!.trim()
+          : null;
+
+  if (normalizedReceiverId.isEmpty) {
+    throw ArgumentError(
+      'The receiver ID cannot be empty.',
+    );
+  }
+
+  if (normalizedReceiverId == user.uid) {
+    throw ArgumentError(
+      'You cannot send a message to yourself.',
+    );
+  }
+
+  if (normalizedBookId.isEmpty) {
+    throw ArgumentError(
+      'The book ID cannot be empty.',
+    );
+  }
+
+  if (normalizedBookTitle.isEmpty) {
+    throw ArgumentError(
+      'The book title cannot be empty.',
+    );
+  }
+
+  final DocumentReference<Map<String, dynamic>> document =
+      await _messages.add(
+    <String, dynamic>{
+      'senderId': user.uid,
+      'receiverId': normalizedReceiverId,
+      'content': '',
+      'type': 'book',
+      'bookId': normalizedBookId,
+      'bookTitle': normalizedBookTitle,
+      'bookAuthor': normalizedBookAuthor,
+      'bookCoverUrl': normalizedBookCoverUrl,
+      'sentAt': FieldValue.serverTimestamp(),
+      'isRead': false,
+    },
+  );
+
+  return document.id;
+}
+
   Future<List<Message>> getConversation(
     String otherUserId,
   ) async {
     final User user = _requireCurrentUser();
 
-    final String normalizedOtherUserId =
-        otherUserId.trim();
+    final String normalizedOtherUserId = otherUserId.trim();
 
     if (normalizedOtherUserId.isEmpty) {
       return <Message>[];
     }
 
-    final Future<
-        QuerySnapshot<Map<String, dynamic>>>
-        sentRequest = _messages
-            .where(
-              'senderId',
-              isEqualTo: user.uid,
-            )
-            .where(
-              'receiverId',
-              isEqualTo: normalizedOtherUserId,
-            )
-            .get();
+    final Future<QuerySnapshot<Map<String, dynamic>>> sentRequest = _messages
+        .where(
+          'senderId',
+          isEqualTo: user.uid,
+        )
+        .where(
+          'receiverId',
+          isEqualTo: normalizedOtherUserId,
+        )
+        .get();
 
-    final Future<
-        QuerySnapshot<Map<String, dynamic>>>
-        receivedRequest = _messages
+    final Future<QuerySnapshot<Map<String, dynamic>>> receivedRequest =
+        _messages
             .where(
               'senderId',
               isEqualTo: normalizedOtherUserId,
@@ -121,11 +174,8 @@ class MessageService {
             )
             .get();
 
-    final List<
-        QuerySnapshot<Map<String, dynamic>>>
-        results = await Future.wait(
-      <Future<
-          QuerySnapshot<Map<String, dynamic>>>>[
+    final List<QuerySnapshot<Map<String, dynamic>>> results = await Future.wait(
+      <Future<QuerySnapshot<Map<String, dynamic>>>>[
         sentRequest,
         receivedRequest,
       ],
@@ -133,11 +183,11 @@ class MessageService {
 
     final List<Message> messages = <Message>[
       ...results[0].docs.map(
-        Message.fromFirestore,
-      ),
+            Message.fromFirestore,
+          ),
       ...results[1].docs.map(
-        Message.fromFirestore,
-      ),
+            Message.fromFirestore,
+          ),
     ];
 
     messages.sort(_compareBySentAt);
@@ -145,55 +195,43 @@ class MessageService {
     return messages;
   }
 
-  Future<List<Message>>
-      getCurrentUserMessages() async {
+  Future<List<Message>> getCurrentUserMessages() async {
     final User user = _requireCurrentUser();
 
-    final Future<
-        QuerySnapshot<Map<String, dynamic>>>
-        sentRequest = _messages
-            .where(
-              'senderId',
-              isEqualTo: user.uid,
-            )
-            .get();
+    final Future<QuerySnapshot<Map<String, dynamic>>> sentRequest = _messages
+        .where(
+          'senderId',
+          isEqualTo: user.uid,
+        )
+        .get();
 
-    final Future<
-        QuerySnapshot<Map<String, dynamic>>>
-        receivedRequest = _messages
+    final Future<QuerySnapshot<Map<String, dynamic>>> receivedRequest =
+        _messages
             .where(
               'receiverId',
               isEqualTo: user.uid,
             )
             .get();
 
-    final List<
-        QuerySnapshot<Map<String, dynamic>>>
-        results = await Future.wait(
-      <Future<
-          QuerySnapshot<Map<String, dynamic>>>>[
+    final List<QuerySnapshot<Map<String, dynamic>>> results = await Future.wait(
+      <Future<QuerySnapshot<Map<String, dynamic>>>>[
         sentRequest,
         receivedRequest,
       ],
     );
 
-    final Map<String, Message> uniqueMessages =
-        <String, Message>{};
+    final Map<String, Message> uniqueMessages = <String, Message>{};
 
-    for (final QueryDocumentSnapshot<
-        Map<String, dynamic>> document
-        in <QueryDocumentSnapshot<
-            Map<String, dynamic>>>[
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> document
+        in <QueryDocumentSnapshot<Map<String, dynamic>>>[
       ...results[0].docs,
       ...results[1].docs,
     ]) {
-      uniqueMessages[document.id] =
-          Message.fromFirestore(document);
+      uniqueMessages[document.id] = Message.fromFirestore(document);
     }
 
-    final List<Message> messages =
-        uniqueMessages.values.toList()
-          ..sort(_compareBySentAt);
+    final List<Message> messages = uniqueMessages.values.toList()
+      ..sort(_compareBySentAt);
 
     return messages;
   }
@@ -203,23 +241,21 @@ class MessageService {
   ) async {
     final User user = _requireCurrentUser();
 
-    final QuerySnapshot<Map<String, dynamic>>
-        snapshot = await _messages
-            .where(
-              'senderId',
-              isEqualTo: otherUserId.trim(),
-            )
-            .where(
-              'receiverId',
-              isEqualTo: user.uid,
-            )
-            .get();
+    final QuerySnapshot<Map<String, dynamic>> snapshot = await _messages
+        .where(
+          'senderId',
+          isEqualTo: otherUserId.trim(),
+        )
+        .where(
+          'receiverId',
+          isEqualTo: user.uid,
+        )
+        .get();
 
     final WriteBatch batch = _firestore.batch();
     bool hasUpdates = false;
 
-    for (final QueryDocumentSnapshot<
-        Map<String, dynamic>> document
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> document
         in snapshot.docs) {
       if (document.data()['isRead'] != true) {
         batch.update(
@@ -243,20 +279,18 @@ class MessageService {
   ) async {
     final User user = _requireCurrentUser();
 
-    final DocumentReference<Map<String, dynamic>>
-        reference = _messages.doc(
+    final DocumentReference<Map<String, dynamic>> reference = _messages.doc(
       messageId.trim(),
     );
 
-    final DocumentSnapshot<Map<String, dynamic>>
-        snapshot = await reference.get();
+    final DocumentSnapshot<Map<String, dynamic>> snapshot =
+        await reference.get();
 
     if (!snapshot.exists) {
       return;
     }
 
-    final Map<String, dynamic> data =
-        snapshot.data() ?? <String, dynamic>{};
+    final Map<String, dynamic> data = snapshot.data() ?? <String, dynamic>{};
 
     if (data['senderId'] != user.uid) {
       throw StateError(
@@ -270,17 +304,16 @@ class MessageService {
   Future<int> getUnreadMessageCount() async {
     final User user = _requireCurrentUser();
 
-    final QuerySnapshot<Map<String, dynamic>>
-        snapshot = await _messages
-            .where(
-              'receiverId',
-              isEqualTo: user.uid,
-            )
-            .where(
-              'isRead',
-              isEqualTo: false,
-            )
-            .get();
+    final QuerySnapshot<Map<String, dynamic>> snapshot = await _messages
+        .where(
+          'receiverId',
+          isEqualTo: user.uid,
+        )
+        .where(
+          'isRead',
+          isEqualTo: false,
+        )
+        .get();
 
     return snapshot.size;
   }
@@ -290,12 +323,10 @@ class MessageService {
     Message second,
   ) {
     final DateTime firstDate =
-        first.sentAt ??
-            DateTime.fromMillisecondsSinceEpoch(0);
+        first.sentAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
     final DateTime secondDate =
-        second.sentAt ??
-            DateTime.fromMillisecondsSinceEpoch(0);
+        second.sentAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
     return firstDate.compareTo(secondDate);
   }

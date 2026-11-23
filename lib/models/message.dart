@@ -8,6 +8,11 @@ class Message {
     required this.content,
     required this.sentAt,
     required this.isRead,
+    this.type = 'text',
+    this.bookId,
+    this.bookTitle,
+    this.bookAuthor,
+    this.bookCoverUrl,
   });
 
   final String id;
@@ -16,6 +21,15 @@ class Message {
   final String content;
   final DateTime? sentAt;
   final bool isRead;
+
+  // Üzenettípus: "text" vagy "book".
+  final String type;
+
+  // Könyvmegosztás esetén kitöltött mezők.
+  final String? bookId;
+  final String? bookTitle;
+  final String? bookAuthor;
+  final String? bookCoverUrl;
 
   factory Message.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> document,
@@ -28,13 +42,20 @@ class Message {
     return Message(
       id: document.id,
       senderId: data['senderId'] as String? ?? '',
-      receiverId:
-          data['receiverId'] as String? ?? '',
+      receiverId: data['receiverId'] as String? ?? '',
       content: data['content'] as String? ?? '',
       sentAt: sentAtValue is Timestamp
           ? sentAtValue.toDate()
           : null,
       isRead: data['isRead'] as bool? ?? false,
+
+      // A régi üzenetekben nincs type mező, ezért azok text típusúak.
+      type: data['type'] as String? ?? 'text',
+
+      bookId: data['bookId'] as String?,
+      bookTitle: data['bookTitle'] as String?,
+      bookAuthor: data['bookAuthor'] as String?,
+      bookCoverUrl: data['bookCoverUrl'] as String?,
     );
   }
 
@@ -48,5 +69,9 @@ class Message {
     }
 
     return senderId;
+  }
+
+  bool get isBookMessage {
+    return type == 'book' && bookId != null && bookId!.isNotEmpty;
   }
 }
