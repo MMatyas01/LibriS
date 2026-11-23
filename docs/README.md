@@ -27,3 +27,6 @@ A képernyők a felhasználói folyamat (user flow) sorrendjében vannak listáz
 9. [My Library](screens/09_my_library.md)
 10. [Book Details](screens/10_book_details.md)
 11. [Review Details](screens/11_review_details.md)
+12. [Book Request](screens/12_book_request.md)
+13. [My Requests](screens/13_my_requests.md)
+14. [Book Recognition](screens/14_book_recognition.md)
