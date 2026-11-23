@@ -38,5 +38,5 @@ A bejelentkezett felhasználó profiladatainak, olvasási statisztikáinak, saj�
 
 ## Screenshotok
 
-![Profile Screen](../screenshots/12_profile1.jpg)
-![Profile Screen with notification](../screenshots/12_profile2.jpg)
+![Profile Screen](../screenshots/15_profile1.jpg)
+![Profile Screen with notification](../screenshots/15_profile2.jpg)

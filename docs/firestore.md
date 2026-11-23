@@ -47,9 +47,18 @@ A véleményekhez írt hozzászólások.
 
 ### `messages`
 
-A felhasználók közötti üzenetváltás (későbbre tervezett).
+A felhasználók közötti üzenetváltás.
 
-- `senderId` (String), `receiverId` (String), `content` (String), `sentAt` (Timestamp), `isRead` (Boolean).
+- `senderId` (String): Küldő UID-ja.
+- `receiverId` (String): Címzett UID-ja.
+- `content` (String): Az üzenet szövege (max. 2000 karakter).
+- `sentAt` (Timestamp): Küldés időpontja.
+- `isRead` (Boolean): Olvasott-e az üzenet.
+- `type` (String): Az üzenet típusa: 'text' vagy 'book'.
+- `bookId` (String | null): Megosztott könyv ID-ja (csak 'book' típus esetén).
+- `bookTitle` (String | null): Megosztott könyv címe (csak 'book' típus esetén).
+- `bookAuthor` (String | null): Megosztott könyv szerzője (csak 'book' típus esetén).
+- `bookCoverUrl` (String | null): Megosztott könyv borítóképe (csak 'book' típus esetén).
 
 ### `book_requests`
 
@@ -106,7 +115,9 @@ service cloud.firestore {
 
     function isPublicUser(userId) {
       return userExists(userId)
-          && get(/databases/$(database)/documents/users/$(userId)).data.get('accountVisibility', 'private') == 'public';
+          && get(
+            /databases/$(database)/documents/users/$(userId)
+          ).data.get('accountVisibility', 'private') == 'public';
     }
 
     function bookExists(bookId) {
@@ -129,7 +140,8 @@ service cloud.firestore {
     // Users can manage their own library entries only.
     match /library_entries/{entryId} {
       allow read: if isSignedIn()
-                  && request.auth.uid == resource.data.userId;
+                  && request.auth.uid
+                      == resource.data.userId;
 
       allow create: if isSignedIn()
                     && request.auth.uid
@@ -154,13 +166,19 @@ service cloud.firestore {
     // Users can access and update their own profile.
     match /users/{userId} {
       allow create: if isCurrentUser(userId);
-      allow update, delete: if isCurrentUser(userId);
 
-      allow read: if isCurrentUser(userId) || (
-        isSignedIn() &&
-        isPublicUser(request.auth.uid) &&
-        resource.data.get('accountVisibility', 'private') == 'public'
-      );
+      allow update, delete:
+          if isCurrentUser(userId);
+
+      allow read: if isCurrentUser(userId)
+                  || (
+                    isSignedIn()
+                    && isPublicUser(request.auth.uid)
+                    && resource.data.get(
+                      'accountVisibility',
+                      'private'
+                    ) == 'public'
+                  );
     }
 
     // Reviews are publicly readable.
@@ -265,8 +283,9 @@ service cloud.firestore {
                         == resource.data.userId;
     }
 
-    // Messages are visible only to the sender and receiver.
+    // Text and book messages.
     match /messages/{messageId} {
+      // Only the sender and receiver can read a message.
       allow read: if isSignedIn()
                   && (
                     request.auth.uid
@@ -276,29 +295,130 @@ service cloud.firestore {
                   );
 
       allow create: if isSignedIn()
+
+                    // Only supported message fields are allowed.
                     && request.resource.data.keys().hasOnly([
                       'senderId',
                       'receiverId',
                       'content',
                       'sentAt',
-                      'isRead'
+                      'isRead',
+                      'type',
+                      'bookId',
+                      'bookTitle',
+                      'bookAuthor',
+                      'bookCoverUrl'
                     ])
+
+                    // Every message must contain these fields.
+                    && request.resource.data.keys().hasAll([
+                      'senderId',
+                      'receiverId',
+                      'content',
+                      'sentAt',
+                      'isRead',
+                      'type'
+                    ])
+
+                    // A user cannot send a message as someone else.
                     && request.resource.data.senderId
                         == request.auth.uid
+
+                    // A user cannot send a message to themselves.
+                    && request.resource.data.receiverId
+                        != request.auth.uid
+
                     && request.resource.data.receiverId
                         is string
+                    && request.resource.data.receiverId.size()
+                        > 0
+
+                    // The receiver must be an existing user.
                     && userExists(
                       request.resource.data.receiverId
                     )
+
                     && request.resource.data.content
                         is string
                     && request.resource.data.content.size()
-                        > 0
-                    && request.resource.data.content.size()
                         <= 2000
-                    && request.resource.data.isRead
-                        == false;
 
+                    // Newly sent messages must be unread.
+                    && request.resource.data.isRead
+                        == false
+
+                    // Only text and book messages are supported.
+                    && (
+                      request.resource.data.type == 'text'
+                      || request.resource.data.type == 'book'
+                    )
+
+                    // Validation for normal text messages.
+                    && (
+                      request.resource.data.type != 'text'
+                      || (
+                        request.resource.data.content.size()
+                            > 0
+                        && !(
+                          'bookId'
+                          in request.resource.data
+                        )
+                        && !(
+                          'bookTitle'
+                          in request.resource.data
+                        )
+                        && !(
+                          'bookAuthor'
+                          in request.resource.data
+                        )
+                        && !(
+                          'bookCoverUrl'
+                          in request.resource.data
+                        )
+                      )
+                    )
+
+                    // Validation for shared book messages.
+                    && (
+                      request.resource.data.type != 'book'
+                      || (
+                        request.resource.data.keys().hasAll([
+                          'bookId',
+                          'bookTitle',
+                          'bookAuthor',
+                          'bookCoverUrl'
+                        ])
+                        && request.resource.data.bookId
+                            is string
+                        && request.resource.data.bookId.size()
+                            > 0
+                        && bookExists(
+                          request.resource.data.bookId
+                        )
+                        && request.resource.data.bookTitle
+                            is string
+                        && request.resource.data.bookTitle.size()
+                            > 0
+                        && request.resource.data.bookTitle.size()
+                            <= 300
+                        && request.resource.data.bookAuthor
+                            is string
+                        && request.resource.data.bookAuthor.size()
+                            <= 300
+                        && (
+                          request.resource.data.bookCoverUrl
+                              == null
+                          || (
+                            request.resource.data.bookCoverUrl
+                                is string
+                            && request.resource.data.bookCoverUrl
+                                .size() <= 1000
+                          )
+                        )
+                      )
+                    );
+
+      // Only the receiver can mark a message as read.
       allow update: if isSignedIn()
                     && request.auth.uid
                         == resource.data.receiverId
@@ -308,14 +428,15 @@ service cloud.firestore {
                       'isRead'
                     ])
                     && request.resource.data.isRead
-                        is bool;
+                        == true;
 
+      // Only the sender can delete the message.
       allow delete: if isSignedIn()
                     && request.auth.uid
                         == resource.data.senderId;
     }
 
-    // Book requests – a user submits a proposed book for admin review.
+    // A user submits a proposed book for admin review.
     match /book_requests/{requestId} {
       allow read: if isSignedIn()
                   && request.auth.uid
@@ -360,52 +481,70 @@ service cloud.firestore {
                         > 0
                     && request.resource.data.proposedAuthor.size()
                         <= 200
-                    && (request.resource.data.isbn
+                    && (
+                      request.resource.data.isbn == null
+                      || (
+                        request.resource.data.isbn
+                            is string
+                        && request.resource.data.isbn.size()
+                            <= 20
+                      )
+                    )
+                    && (
+                      request.resource.data.publicationYear
                           == null
-                        || (request.resource.data.isbn
-                              is string
-                            && request.resource.data.isbn.size()
-                              <= 20))
-                    && (request.resource.data.publicationYear
-                          == null
-                        || (request.resource.data.publicationYear
-                              is int
-                            && request.resource.data.publicationYear
-                              >= 1000
-                            && request.resource.data.publicationYear
-                              <= 2100))
-                    && (request.resource.data.publisher
-                          == null
-                        || (request.resource.data.publisher
-                              is string
-                            && request.resource.data.publisher.size()
-                              <= 200))
-                    && (request.resource.data.imageUrl
-                          == null
-                        || (request.resource.data.imageUrl
-                              is string
-                            && request.resource.data.imageUrl.size()
-                              <= 500));
+                      || (
+                        request.resource.data.publicationYear
+                            is int
+                        && request.resource.data.publicationYear
+                            >= 1000
+                        && request.resource.data.publicationYear
+                            <= 2100
+                      )
+                    )
+                    && (
+                      request.resource.data.publisher == null
+                      || (
+                        request.resource.data.publisher
+                            is string
+                        && request.resource.data.publisher.size()
+                            <= 200
+                      )
+                    )
+                    && (
+                      request.resource.data.imageUrl == null
+                      || (
+                        request.resource.data.imageUrl
+                            is string
+                        && request.resource.data.imageUrl.size()
+                            <= 500
+                      )
+                    );
 
-      // Két engedélyezett update eset:
-      //   1) User visszavonja a saját pending kérését (status -> cancelled)
-      //   2) User "látott"-ként jelöli az elbírált kérést (seenByUserAt -> now)
+      // A user can cancel a pending request or mark a reviewed
+      // request as seen.
       allow update: if isSignedIn()
                     && request.auth.uid
                         == resource.data.userId
                     && (
                       (
                         resource.data.status == 'pending'
-                        && request.resource.data.diff(resource.data)
-                            .affectedKeys().hasOnly(['status'])
+                        && request.resource.data.diff(
+                          resource.data
+                        ).affectedKeys().hasOnly([
+                          'status'
+                        ])
                         && request.resource.data.status
                             == 'cancelled'
                       )
                       ||
                       (
                         resource.data.reviewedAt != null
-                        && request.resource.data.diff(resource.data)
-                            .affectedKeys().hasOnly(['seenByUserAt'])
+                        && request.resource.data.diff(
+                          resource.data
+                        ).affectedKeys().hasOnly([
+                          'seenByUserAt'
+                        ])
                         && request.resource.data.seenByUserAt
                             == request.time
                       )

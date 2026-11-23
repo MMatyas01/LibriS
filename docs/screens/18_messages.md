@@ -32,5 +32,4 @@ A felhasználó privát beszélgetéseinek megjelenítése, új beszélgetés in
 
 ## Screenshotok
 
-![Messages Screen](../screenshots/15_messages1.jpg)
-
+![Messages Screen](../screenshots/18_messages.jpg)

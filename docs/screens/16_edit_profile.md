@@ -41,5 +41,4 @@ A felhasználó szerkeszthető profiladatainak módosítása, valamint profilké
 
 ## Screenshotok
 
-![Edit Profile Screen](../screenshots/13_edit_profile1.jpg)
-![Profile Image Selection](../screenshots/13_edit_profile1.jpg)
+![Edit Profile Screen](../screenshots/16_edit_profile.jpg)

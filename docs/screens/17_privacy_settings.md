@@ -31,4 +31,4 @@ A felhasználói profil láthatóságának kezelése a meglévő Firestore-adatm
 
 ## Screenshotok
 
-![Privacy Settings Screen](../screenshots/14_privacy_settings.jpg)
+![Privacy Settings Screen](../screenshots/17_privacy_settings.jpg)

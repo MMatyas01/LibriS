@@ -33,5 +33,5 @@ Két felhasználó közötti privát szöveges beszélgetés megjelenítése és
 
 ## Screenshotok
 
-![Chat Screen](../screenshots/16_chat1.jpg)
-![Chat Conversation](../screenshots/16_chat2.jpg)
+![Chat Screen](../screenshots/19_chat1.jpg)
+![Chat Conversation](../screenshots/19_chat2.jpg)

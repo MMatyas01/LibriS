@@ -34,5 +34,4 @@ A felhasználó által írt review-k és azoknak a review-knak az összegyűjtö
 
 ## Screenshotok
 
-![My Reviews Screen](../screenshots/17_my_reviews1.jpg)
-![Collapsed Review Sections](../screenshots/17_my_reviews1.jpg)
+![My Reviews Screen](../screenshots/20_my_reviews.jpg)
