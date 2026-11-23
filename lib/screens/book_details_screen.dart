@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'share_book_screen.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/book_cover.dart';
@@ -13,7 +14,7 @@ class BookDetailsScreen extends StatefulWidget {
   final String bookId;
   final Map<String, dynamic> bookData;
   final String? currentStatus;
-  final Function(int)? onNavigateToTab; 
+  final Function(int)? onNavigateToTab;
 
   const BookDetailsScreen({
     super.key,
@@ -35,6 +36,21 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   void initState() {
     super.initState();
     _status = widget.currentStatus;
+  }
+
+  Future<void> _shareBook() async {
+    final Map<String, dynamic> book = widget.bookData;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ShareBookScreen(
+          bookId: widget.bookId,
+          bookTitle: (book['title'] as String? ?? 'Unknown Title').trim(),
+          bookAuthor: (book['author'] as String? ?? 'Unknown Author').trim(),
+          bookCoverUrl: (book['coverUrl'] as String?)?.trim(),
+        ),
+      ),
+    );
   }
 
   Future<void> _addToLibrary() async {
@@ -65,7 +81,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding book: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error adding book: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -78,7 +96,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     final book = widget.bookData;
     final theme = Theme.of(context);
     final screenHeight = MediaQuery.sizeOf(context).height;
-    
+
     String pubYear = '';
     if (book['publicationYear'] is Timestamp) {
       pubYear = (book['publicationYear'] as Timestamp).toDate().year.toString();
@@ -94,12 +112,19 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         iconTheme: const IconThemeData(color: AppColors.charcoal),
         title: const Text(
           'Book details',
-          style: TextStyle(color: AppColors.charcoal, fontFamily: 'Serif', fontWeight: FontWeight.bold, fontSize: 20),
+          style: TextStyle(
+              color: AppColors.charcoal,
+              fontFamily: 'Serif',
+              fontWeight: FontWeight.bold,
+              fontSize: 20),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {},
+            onPressed: _shareBook,
+            tooltip: 'Share book',
+            icon: const Icon(
+              Icons.share_outlined,
+            ),
           )
         ],
       ),
@@ -125,21 +150,31 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        (book['genre'] ?? 'UNKNOWN GENRE').toString().toUpperCase(),
-                        style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                        (book['genre'] ?? 'UNKNOWN GENRE')
+                            .toString()
+                            .toUpperCase(),
+                        style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2),
                       ),
                       SizedBox(height: screenHeight * 0.01),
                       Text(
                         book['title'] ?? 'Unknown Title',
-                        style: const TextStyle(fontFamily: 'Serif', fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.charcoal),
+                        style: const TextStyle(
+                            fontFamily: 'Serif',
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.charcoal),
                       ),
                       SizedBox(height: screenHeight * 0.01),
                       Text(
                         book['author'] ?? 'Unknown Author',
-                        style: const TextStyle(fontSize: 16, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                       SizedBox(height: screenHeight * 0.02),
-                      
                       StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('reviews')
@@ -162,16 +197,18 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
                           return Row(
                             children: [
-                              Icon(
-                                count > 0 ? Icons.star : Icons.star_border, 
-                                color: count > 0 ? Colors.orange : Colors.grey, 
-                                size: 18
-                              ),
+                              Icon(count > 0 ? Icons.star : Icons.star_border,
+                                  color:
+                                      count > 0 ? Colors.orange : Colors.grey,
+                                  size: 18),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  count > 0 ? '${avgRating.toStringAsFixed(1)} · $count ${count == 1 ? 'review' : 'reviews'}' : 'None · 0 reviews',
-                                  style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                                  count > 0
+                                      ? '${avgRating.toStringAsFixed(1)} · $count ${count == 1 ? 'review' : 'reviews'}'
+                                      : 'None · 0 reviews',
+                                  style: TextStyle(
+                                      color: Colors.grey[700], fontSize: 14),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -192,15 +229,18 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildInfoColumn('Pages', book['pageCount']?.toString() ?? '-'),
-                _buildInfoColumn('Published', pubYear.isNotEmpty ? pubYear : '-'),
-                _buildInfoColumn('Publisher', book['publisher']?.toString() ?? '-'),
+                _buildInfoColumn(
+                    'Published', pubYear.isNotEmpty ? pubYear : '-'),
+                _buildInfoColumn(
+                    'Publisher', book['publisher']?.toString() ?? '-'),
               ],
             ),
             SizedBox(height: screenHeight * 0.04),
 
             Text(
               book['description'] ?? 'No description available.',
-              style: const TextStyle(fontSize: 15, height: 1.5, color: AppColors.charcoal),
+              style: const TextStyle(
+                  fontSize: 15, height: 1.5, color: AppColors.charcoal),
             ),
             SizedBox(height: screenHeight * 0.03),
 
@@ -211,18 +251,21 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      Navigator.pop(context); 
-                      widget.onNavigateToTab!(3); 
+                      Navigator.pop(context);
+                      widget.onNavigateToTab!(3);
                     },
-                    icon: const Icon(Icons.forum_outlined, color: AppColors.forest),
+                    icon: const Icon(Icons.forum_outlined,
+                        color: AppColors.forest),
                     label: const Text(
                       'Write a review in Community',
-                      style: TextStyle(color: AppColors.forest, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: AppColors.forest, fontWeight: FontWeight.bold),
                     ),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppColors.forest),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 ),
@@ -233,15 +276,20 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: _isAdding ? null : _addToLibrary,
-                  icon: _isAdding 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.add),
+                  icon: _isAdding
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.add),
                   label: const Text('Add to Library'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.forest,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               )
@@ -260,7 +308,10 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                     const SizedBox(width: 8),
                     Text(
                       'In your library · ${_status == 'reading' ? 'Reading' : (_status == 'finished' ? 'Finished' : 'Want to read')}',
-                      style: const TextStyle(color: AppColors.forest, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                          color: AppColors.forest,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16),
                     ),
                   ],
                 ),
@@ -294,17 +345,18 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                   children: [
                     SectionHeader(
                       title: 'Reader reviews',
-                      actionText: reviewCount > 0 ? 'See all $reviewCount' : null,
+                      actionText:
+                          reviewCount > 0 ? 'See all $reviewCount' : null,
                       onActionTap: () {},
                     ),
                     SizedBox(height: screenHeight * 0.02),
-                    
                     if (snapshot.connectionState == ConnectionState.waiting)
                       const Center(child: CircularProgressIndicator())
                     else if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
                       const Text(
                         'No reviews yet.',
-                        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                        style: TextStyle(
+                            color: Colors.grey, fontStyle: FontStyle.italic),
                       )
                     else
                       Column(
@@ -318,7 +370,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ReviewDetailsScreen(reviewId: doc.id),
+                                  builder: (context) =>
+                                      ReviewDetailsScreen(reviewId: doc.id),
                                 ),
                               );
                             },
@@ -340,22 +393,35 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     if (_status == null) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: AppColors.sage.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(16)),
-        child: const Text('Not in your library', style: TextStyle(color: AppColors.forest, fontSize: 12, fontWeight: FontWeight.w600)),
+        decoration: BoxDecoration(
+            color: AppColors.sage.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16)),
+        child: const Text('Not in your library',
+            style: TextStyle(
+                color: AppColors.forest,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
       );
     }
 
-    String statusText = _status == 'reading' ? 'Reading' : (_status == 'finished' ? 'Finished' : 'Want to read');
+    String statusText = _status == 'reading'
+        ? 'Reading'
+        : (_status == 'finished' ? 'Finished' : 'Want to read');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: AppColors.sage, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: AppColors.sage, borderRadius: BorderRadius.circular(16)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.check, size: 14, color: AppColors.forest),
           const SizedBox(width: 4),
-          Text('In your library · $statusText', style: const TextStyle(color: AppColors.forest, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text('In your library · $statusText',
+              style: const TextStyle(
+                  color: AppColors.forest,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -365,14 +431,23 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     return Expanded(
       child: Column(
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500)),
           const SizedBox(height: 4),
           SizedBox(
-            height: 24, 
+            height: 24,
             child: Center(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.charcoal), maxLines: 1),
+                child: Text(value,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: AppColors.charcoal),
+                    maxLines: 1),
               ),
             ),
           ),

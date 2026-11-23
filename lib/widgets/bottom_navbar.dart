@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-class BottomNavbar extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onItemSelected;
+import 'unread_messages_badge.dart';
 
+class BottomNavbar extends StatelessWidget {
   const BottomNavbar({
     super.key,
     required this.selectedIndex,
     required this.onItemSelected,
   });
+
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
 
   static const List<NavigationItem> _items = [
     NavigationItem(
@@ -57,9 +59,23 @@ class BottomNavbar extends StatelessWidget {
         ),
         child: Row(
           children: List.generate(_items.length, (index) {
-            final item = _items[index];
-            final isSelected = selectedIndex == index;
-            final color = isSelected ? _activeColor : _inactiveColor;
+            final NavigationItem item = _items[index];
+            final bool isSelected = selectedIndex == index;
+            final Color color = isSelected ? _activeColor : _inactiveColor;
+
+            Widget icon = Icon(
+              isSelected ? item.activeIcon : item.icon,
+              color: color,
+              size: 24,
+            );
+
+            if (index == 4) {
+              icon = UnreadMessagesBadge(
+                top: -7,
+                right: -10,
+                child: icon,
+              );
+            }
 
             return Expanded(
               child: InkWell(
@@ -72,11 +88,7 @@ class BottomNavbar extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        isSelected ? item.activeIcon : item.icon,
-                        color: color,
-                        size: 24,
-                      ),
+                      icon,
                       const SizedBox(height: 4),
                       Text(
                         item.label,
@@ -85,9 +97,8 @@ class BottomNavbar extends StatelessWidget {
                         style: TextStyle(
                           color: color,
                           fontSize: 10,
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w400,
                         ),
                       ),
                     ],
@@ -103,13 +114,13 @@ class BottomNavbar extends StatelessWidget {
 }
 
 class NavigationItem {
-  final String label;
-  final IconData icon;
-  final IconData activeIcon;
-
   const NavigationItem({
     required this.label,
     required this.icon,
     required this.activeIcon,
   });
+
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
 }
