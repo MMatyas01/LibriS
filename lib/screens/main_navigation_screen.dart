@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/bottom_navbar.dart';
-import 'home_screen.dart';
-import 'my_library_screen.dart'; 
-import 'profile_screen.dart';
+import 'community_screen.dart';
 import 'discover_screen.dart';
+import 'home_screen.dart';
+import 'my_library_screen.dart';
+import 'profile_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -16,7 +17,6 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
-
   late final List<Widget> _screens;
 
   @override
@@ -26,7 +26,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       HomeScreen(onNavigateToTab: _onItemSelected),
       MyLibraryScreen(onNavigateToTab: _onItemSelected),
       DiscoverScreen(onNavigateToTab: _onItemSelected),
-      const _PlaceholderScreen(title: 'Community'),
+      const CommunityScreen(),
       const ProfileScreen(),
     ];
   }
@@ -47,27 +47,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: BottomNavbar(
         selectedIndex: _selectedIndex,
         onItemSelected: _onItemSelected,
-      ),
-    );
-  }
-}
-
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-
-  const _PlaceholderScreen({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
       ),
     );
   }
